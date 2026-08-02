@@ -1,10 +1,13 @@
-/* style.css */
+/* style.css — все стили для планера задач */
+
+/* Обнуляем отступы и устанавливаем box-sizing для всех элементов */
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
+/* Стили для тела страницы: фон, шрифт, центрирование по горизонтали */
 body {
     font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
     background: #f1f5f9;
@@ -16,6 +19,7 @@ body {
     align-items: flex-start;
 }
 
+/* Основной контейнер — две колонки с отступом между ними */
 .app-container {
     display: flex;
     gap: 2rem;
@@ -24,6 +28,7 @@ body {
     background: transparent;
 }
 
+/* Левая панель: белый фон, скругления, тень, отступы */
 .left-panel {
     flex: 1.2;
     background: #ffffff;
@@ -33,6 +38,7 @@ body {
     align-self: flex-start;
 }
 
+/* Правая панель: аналогично левой, но чуть уже */
 .right-panel {
     flex: 1;
     background: #ffffff;
@@ -43,6 +49,7 @@ body {
     min-width: 300px;
 }
 
+/* Заголовок "Мои задачи" */
 header {
     margin-bottom: 1.5rem;
 }
@@ -54,6 +61,7 @@ h1 {
     color: #0b1a2e;
 }
 
+/* Стиль для подзаголовка (не используется в текущей версии, но оставлен на случай) */
 .subtitle {
     font-size: 1rem;
     color: #64748b;
@@ -62,6 +70,7 @@ h1 {
     padding-left: 0.75rem;
 }
 
+/* Блок планирования (дата и время) — серый фон, скругления */
 .planning {
     display: flex;
     flex-wrap: wrap;
@@ -72,6 +81,7 @@ h1 {
     margin-bottom: 1.5rem;
 }
 
+/* Каждая группа (лейбл + инпут) */
 .planning .form-group {
     display: flex;
     align-items: center;
@@ -79,6 +89,7 @@ h1 {
     flex: 1 0 auto;
 }
 
+/* Подписи к полям */
 .planning label {
     font-size: 0.85rem;
     font-weight: 500;
@@ -86,6 +97,7 @@ h1 {
     white-space: nowrap;
 }
 
+/* Поля ввода даты и времени */
 .planning input {
     border: 1px solid #cbd5e1;
     border-radius: 12px;
@@ -99,20 +111,24 @@ h1 {
     min-width: 100px;
 }
 
+/* Фокус для полей планирования */
 .planning input:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
+/* Блок формы добавления задачи */
 .add-task {
     margin-bottom: 1.8rem;
 }
 
+/* Сама форма — строка с инпутом и кнопкой */
 .task-form {
     display: flex;
     gap: 0.6rem;
 }
 
+/* Поле ввода текста задачи */
 .task-form input {
     flex: 1;
     padding: 0.7rem 1rem;
@@ -124,11 +140,13 @@ h1 {
     background: #fafcff;
 }
 
+/* Фокус для поля ввода задачи */
 .task-form input:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
+/* Кнопка "Добавить" */
 .task-form button {
     padding: 0.7rem 1.6rem;
     background: #3b82f6;
@@ -150,6 +168,7 @@ h1 {
     transform: scale(0.96);
 }
 
+/* Секция списка задач на выбранную дату */
 .task-list-section h2 {
     font-size: 1.2rem;
     font-weight: 600;
@@ -159,7 +178,8 @@ h1 {
     padding-bottom: 0.5rem;
 }
 
-#taskList {
+/* Контейнер для списка задач */
+#taskListForDate {
     list-style: none;
     display: flex;
     flex-direction: column;
@@ -169,7 +189,7 @@ h1 {
     overflow-y: auto;
 }
 
-/* ===== ОБНОВЛЁННЫЙ СТИЛЬ ЭЛЕМЕНТА ЗАДАЧИ ===== */
+/* ===== ОБЩИЙ СТИЛЬ ДЛЯ ЭЛЕМЕНТА ЗАДАЧИ (используется в разных местах) ===== */
 .task-item {
     display: flex;
     align-items: center;
@@ -186,19 +206,22 @@ h1 {
     border-color: #cbd5e1;
 }
 
+/* Чекбокс задачи */
 .task-item .task-checkbox {
     flex-shrink: 0;
 }
 
+/* Блок времени задачи (слева) */
 .task-item .task-time {
-    font-size: 1.15rem;
-    font-weight: 600;
-    color: #0b1a2e;
-    min-width: 120px;
+    font-size: 1.05rem;
+    font-weight: 400;
+    color: #1e293b;
+    min-width: 110px;
     flex-shrink: 0;
     letter-spacing: -0.01em;
 }
 
+/* Текст задачи */
 .task-item .task-text {
     flex: 1;
     font-size: 0.95rem;
@@ -206,6 +229,7 @@ h1 {
     word-break: break-word;
 }
 
+/* Дополнительная мета-информация (не используется в текущей версии) */
 .task-item .task-meta {
     font-size: 0.75rem;
     color: #94a3b8;
@@ -213,11 +237,13 @@ h1 {
     white-space: nowrap;
 }
 
+/* Стиль для выполненной задачи — зачёркнутый текст */
 .task-item.completed .task-text {
     text-decoration: line-through;
     color: #94a3b8;
 }
 
+/* Чекбокс внутри задачи */
 .task-item input[type="checkbox"] {
     width: 1.1rem;
     height: 1.1rem;
@@ -225,6 +251,7 @@ h1 {
     cursor: pointer;
 }
 
+/* Кнопка удаления задачи */
 .task-item .delete-btn {
     background: none;
     border: none;
@@ -243,12 +270,14 @@ h1 {
     color: #dc2626;
 }
 
+/* Блок статистики в левой панели */
 .stats {
     margin-top: 0.5rem;
     padding-top: 1rem;
     border-top: 2px solid #eef2f6;
 }
 
+/* Сетка для элементов статистики */
 .stats-grid {
     display: flex;
     flex-wrap: wrap;
@@ -279,7 +308,8 @@ h1 {
     text-align: center;
 }
 
-/* ===== ПРАВАЯ ПАНЕЛЬ ===== */
+/* ===== СТИЛИ ДЛЯ ПРАВОЙ ПАНЕЛИ ===== */
+/* Вкладки (Календарь, Архив, Статистика) */
 .tabs {
     display: flex;
     gap: 0.3rem;
@@ -312,6 +342,7 @@ h1 {
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
+/* Панели вкладок (по умолчанию скрыты, активная показывается) */
 .tab-pane {
     display: none;
     animation: fadeIn 0.2s;
@@ -321,11 +352,13 @@ h1 {
     display: block;
 }
 
+/* Анимация появления */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* Переключатель видов (День, Неделя, Месяц, Свой промежуток, Все задачи) */
 .view-switcher {
     display: flex;
     gap: 0.3rem;
@@ -354,6 +387,7 @@ h1 {
     box-shadow: 0 1px 4px rgba(0,0,0,0.05);
 }
 
+/* Панель управления навигацией календаря (стрелки и заголовок) */
 .calendar-controls {
     display: flex;
     align-items: center;
@@ -379,12 +413,14 @@ h1 {
     background: #e2e8f0;
 }
 
+/* Заголовок календаря (отображает текущий период) */
 #calendarTitle {
     font-weight: 600;
     font-size: 1rem;
     color: #0b1a2e;
 }
 
+/* Контейнер для выбора промежутка (свой) */
 .custom-range {
     display: flex;
     gap: 1rem;
@@ -421,6 +457,12 @@ h1 {
     background: #2563eb;
 }
 
+/* ===== ОТОБРАЖЕНИЕ КАЛЕНДАРЯ ===== */
+.day-view, .week-view, .month-view, .custom-view, .all-tasks-view {
+    margin-bottom: 1rem;
+}
+
+/* День — просто дата */
 .day-view {
     background: #f8fafc;
     padding: 1rem;
@@ -432,70 +474,79 @@ h1 {
     color: #1e293b;
 }
 
-.day-view .task-item {
-    background: white;
-}
-
-.week-view {
+/* Сетки для недели, месяца и своего промежутка — 7 колонок */
+.week-view, .month-view, .custom-view {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 0.5rem;
 }
 
-.week-day {
+/* Ячейки во всех трёх видах имеют одинаковый стиль */
+.week-cell, .month-cell, .custom-cell {
     background: #f8fafc;
-    padding: 0.6rem;
     border-radius: 12px;
+    padding: 0.5rem 0.3rem;
     text-align: center;
-    font-size: 0.8rem;
     border: 1px solid #eef2f6;
-}
-
-.week-day .day-label {
-    font-weight: 600;
-    color: #475569;
-}
-
-.week-day .day-tasks {
-    margin-top: 0.3rem;
-    font-size: 0.7rem;
-    color: #3b82f6;
+    transition: background 0.2s, border-color 0.2s;
     cursor: pointer;
-    text-decoration: underline;
-}
-
-.month-view {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 0.3rem;
-}
-
-.month-cell {
-    aspect-ratio: 1 / 1;
-    background: #f8fafc;
-    border-radius: 12px;
+    min-height: 60px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 0.9rem;
-    border: 1px solid #eef2f6;
-    cursor: default;
-    transition: background 0.2s;
 }
 
-.month-cell.has-tasks {
+/* Число дня */
+.week-cell .day-number,
+.month-cell .day-number,
+.custom-cell .day-number {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #0b1a2e;
+}
+
+/* Название дня недели (сокращённое) */
+.week-cell .day-label,
+.month-cell .day-label,
+.custom-cell .day-label {
+    font-size: 0.7rem;
+    color: #64748b;
+    text-transform: lowercase;
+}
+
+
+/* Ячейка с задачами — голубой фон и синяя рамка */
+.week-cell.has-tasks,
+.month-cell.has-tasks,
+.custom-cell.has-tasks {
     background: #dbeafe;
     border-color: #3b82f6;
-    font-weight: 600;
 }
 
-.month-cell .task-count {
-    font-size: 0.6rem;
-    color: #2563eb;
-    margin-top: 2px;
+/* Сегодняшняя дата — серый фон, тёмная рамка */
+.week-cell.today,
+.month-cell.today,
+.custom-cell.today {
+    background: #e2e8f0;
+    border-color: #0b1a2e;
+    font-weight: 700;
 }
 
+/* Список всех задач в виде "Все задачи" */
+.all-tasks-view {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.all-tasks-view .task-item {
+    background: white;
+}
+
+/* Архив (список выполненных задач) */
 #archiveList {
     list-style: none;
     display: flex;
@@ -509,6 +560,7 @@ h1 {
     opacity: 0.8;
 }
 
+/* Детальная статистика */
 #statsDetail {
     display: flex;
     flex-direction: column;
@@ -534,6 +586,7 @@ h1 {
     color: #0b1a2e;
 }
 
+/* Адаптивность: на узких экранах колонки складываются в столбик */
 @media (max-width: 1000px) {
     .app-container {
         flex-direction: column;
@@ -543,6 +596,7 @@ h1 {
     }
 }
 
+/* Скрытый класс для доступности (невидимый, но читаемый скринридерами) */
 .visually-hidden {
     position: absolute;
     width: 1px;
