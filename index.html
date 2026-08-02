@@ -1,39 +1,48 @@
+<!-- index.html — основная структура одностраничного приложения "Планер задач" -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Планер задач</title>
+    <!-- Подключаем внешний файл стилей -->
     <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+    <!-- Главный контейнер, в котором размещены левая и правая колонки -->
     <div class="app-container">
-        <!-- ЛЕВАЯ КОЛОНКА -->
+        <!-- ЛЕВАЯ КОЛОНКА: добавление задач, их список на выбранную дату и общая статистика -->
         <main class="left-panel">
+            <!-- Заголовок приложения -->
             <header>
                 <h1>📋 Мои задачи</h1>
             </header>
 
-            <!-- Планирование (дата и время) -->
+            <!-- Блок планирования: позволяет указать дату и время для новой задачи -->
             <section class="planning" aria-label="Планирование задачи">
+                <!-- Поле выбора даты -->
                 <div class="form-group">
                     <label for="taskDate">Дата</label>
                     <input type="date" id="taskDate" />
                 </div>
+                <!-- Поле выбора времени начала -->
                 <div class="form-group">
                     <label for="startTime">Время начала</label>
                     <input type="time" id="startTime" />
                 </div>
+                <!-- Поле выбора времени окончания -->
                 <div class="form-group">
                     <label for="endTime">Время конца</label>
                     <input type="time" id="endTime" />
                 </div>
             </section>
 
-            <!-- Форма добавления -->
+            <!-- Форма добавления новой задачи -->
             <section class="add-task" aria-label="Добавление задачи">
                 <form id="taskForm" class="task-form">
+                    <!-- Скрытая подпись для поля ввода (для доступности) -->
                     <label for="taskInput" class="visually-hidden">Новая задача</label>
+                    <!-- Поле ввода текста задачи -->
                     <input
                         type="text"
                         id="taskInput"
@@ -41,29 +50,35 @@
                         required
                         autofocus
                     />
+                    <!-- Кнопка отправки формы -->
                     <button type="submit" id="addBtn">Добавить</button>
                 </form>
             </section>
 
-            <!-- Список задач -->
-            <section class="task-list-section" aria-label="Список задач">
-                <h2>Все задачи</h2>
-                <ul id="taskList">
-                    <!-- задачи динамически -->
+            <!-- Список задач на выбранную дату (дата выбирается в календаре правой панели) -->
+            <section class="task-list-section" aria-label="Задачи на дату">
+                <!-- Заголовок динамически обновляется через JS -->
+                <h2 id="selectedDateTitle">Задачи на сегодня</h2>
+                <!-- Контейнер для элементов задач -->
+                <ul id="taskListForDate">
+                    <!-- Задачи будут добавляться скриптом -->
                 </ul>
             </section>
 
-            <!-- Статистика общая -->
+            <!-- Блок общей статистики по всем задачам (не зависит от выбранной даты) -->
             <footer class="stats">
                 <div class="stats-grid">
+                    <!-- Всего задач -->
                     <span class="stat-item">
                         <span class="stat-label">Всего</span>
                         <span class="stat-value" id="totalCount">0</span>
                     </span>
+                    <!-- Выполнено -->
                     <span class="stat-item">
                         <span class="stat-label">✅ Выполнено</span>
                         <span class="stat-value" id="completedCount">0</span>
                     </span>
+                    <!-- Не выполнено -->
                     <span class="stat-item">
                         <span class="stat-label">⏳ Не выполнено</span>
                         <span class="stat-value" id="incompleteCount">0</span>
@@ -72,44 +87,53 @@
             </footer>
         </main>
 
-        <!-- ПРАВАЯ КОЛОНКА -->
+        <!-- ПРАВАЯ КОЛОНКА: вкладки (Календарь, Архив, Статистика) -->
         <aside class="right-panel">
-            <!-- Вкладки -->
+            <!-- Переключатель вкладок -->
             <div class="tabs">
                 <button class="tab-btn active" data-tab="calendar">Календарь</button>
                 <button class="tab-btn" data-tab="archive">Архив</button>
                 <button class="tab-btn" data-tab="stats">Статистика</button>
             </div>
 
+            <!-- Контейнер для содержимого вкладок -->
             <div class="tab-content">
-                <!-- Календарь -->
+                <!-- Вкладка "Календарь" (активна по умолчанию) -->
                 <div id="tab-calendar" class="tab-pane active">
+                    <!-- Переключатель видов календаря: день, неделя, месяц, свой промежуток, все задачи -->
                     <div class="view-switcher">
                         <button class="view-btn active" data-view="day">День</button>
                         <button class="view-btn" data-view="week">Неделя</button>
                         <button class="view-btn" data-view="month">Месяц</button>
                         <button class="view-btn" data-view="custom">Свой промежуток</button>
+                        <button class="view-btn" data-view="all">Все задачи</button>
                     </div>
-                    <div class="calendar-controls">
+
+                    <!-- Панель управления навигацией по календарю (стрелки и заголовок) -->
+                    <div class="calendar-controls" id="calendarControls">
                         <button id="calendarPrev">◀</button>
                         <span id="calendarTitle">Сегодня</span>
                         <button id="calendarNext">▶</button>
                     </div>
+
+                    <!-- Контейнер для выбора дат при виде "Свой промежуток" (изначально скрыт) -->
                     <div id="customRangeContainer" class="custom-range" style="display:none;">
                         <label>С <input type="date" id="customStart" /></label>
                         <label>По <input type="date" id="customEnd" /></label>
                         <button id="applyCustomRange">Применить</button>
                     </div>
+
+                    <!-- Место для отрисовки календаря или списка всех задач -->
                     <div id="calendarView"></div>
                 </div>
 
-                <!-- Архив -->
+                <!-- Вкладка "Архив" (список выполненных задач) -->
                 <div id="tab-archive" class="tab-pane">
                     <h3>Выполненные задачи</h3>
                     <ul id="archiveList"></ul>
                 </div>
 
-                <!-- Статистика -->
+                <!-- Вкладка "Статистика" (детальная статистика) -->
                 <div id="tab-stats" class="tab-pane">
                     <h3>Детальная статистика</h3>
                     <div id="statsDetail"></div>
@@ -118,6 +142,7 @@
         </aside>
     </div>
 
+    <!-- Подключаем внешний JavaScript-файл -->
     <script src="script.js"></script>
 </body>
 </html>
