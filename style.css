@@ -24,7 +24,6 @@ body {
     background: transparent;
 }
 
-/* Левая панель */
 .left-panel {
     flex: 1.2;
     background: #ffffff;
@@ -34,7 +33,6 @@ body {
     align-self: flex-start;
 }
 
-/* Правая панель */
 .right-panel {
     flex: 1;
     background: #ffffff;
@@ -45,7 +43,6 @@ body {
     min-width: 300px;
 }
 
-/* Шапка левой */
 header {
     margin-bottom: 1.5rem;
 }
@@ -65,7 +62,6 @@ h1 {
     padding-left: 0.75rem;
 }
 
-/* Планирование */
 .planning {
     display: flex;
     flex-wrap: wrap;
@@ -108,7 +104,6 @@ h1 {
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
-/* Форма добавления */
 .add-task {
     margin-bottom: 1.8rem;
 }
@@ -155,7 +150,6 @@ h1 {
     transform: scale(0.96);
 }
 
-/* Список задач (левая) */
 .task-list-section h2 {
     font-size: 1.2rem;
     font-weight: 600;
@@ -175,6 +169,7 @@ h1 {
     overflow-y: auto;
 }
 
+/* ===== ОБНОВЛЁННЫЙ СТИЛЬ ЭЛЕМЕНТА ЗАДАЧИ ===== */
 .task-item {
     display: flex;
     align-items: center;
@@ -191,12 +186,24 @@ h1 {
     border-color: #cbd5e1;
 }
 
+.task-item .task-checkbox {
+    flex-shrink: 0;
+}
+
+.task-item .task-time {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #0b1a2e;
+    min-width: 120px;
+    flex-shrink: 0;
+    letter-spacing: -0.01em;
+}
+
 .task-item .task-text {
     flex: 1;
     font-size: 0.95rem;
     color: #0b1a2e;
     word-break: break-word;
-    transition: color 0.2s, text-decoration 0.2s;
 }
 
 .task-item .task-meta {
@@ -216,7 +223,6 @@ h1 {
     height: 1.1rem;
     accent-color: #3b82f6;
     cursor: pointer;
-    flex-shrink: 0;
 }
 
 .task-item .delete-btn {
@@ -237,7 +243,6 @@ h1 {
     color: #dc2626;
 }
 
-/* Статистика общая */
 .stats {
     margin-top: 0.5rem;
     padding-top: 1rem;
@@ -275,7 +280,6 @@ h1 {
 }
 
 /* ===== ПРАВАЯ ПАНЕЛЬ ===== */
-/* Вкладки */
 .tabs {
     display: flex;
     gap: 0.3rem;
@@ -322,7 +326,6 @@ h1 {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Переключатели видов */
 .view-switcher {
     display: flex;
     gap: 0.3rem;
@@ -351,7 +354,6 @@ h1 {
     box-shadow: 0 1px 4px rgba(0,0,0,0.05);
 }
 
-/* Управление календарём */
 .calendar-controls {
     display: flex;
     align-items: center;
@@ -383,12 +385,42 @@ h1 {
     color: #0b1a2e;
 }
 
-/* Календарь (день, неделя, месяц, custom) */
-#calendarView {
-    min-height: 200px;
+.custom-range {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    align-items: center;
 }
 
-/* День */
+.custom-range label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+    color: #475569;
+}
+
+.custom-range input[type="date"] {
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 0.3rem 0.7rem;
+}
+
+#applyCustomRange {
+    padding: 0.3rem 1.2rem;
+    border: none;
+    background: #3b82f6;
+    color: white;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+#applyCustomRange:hover {
+    background: #2563eb;
+}
+
 .day-view {
     background: #f8fafc;
     padding: 1rem;
@@ -404,7 +436,6 @@ h1 {
     background: white;
 }
 
-/* Неделя */
 .week-view {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
@@ -433,7 +464,6 @@ h1 {
     text-decoration: underline;
 }
 
-/* Месяц */
 .month-view {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
@@ -466,29 +496,6 @@ h1 {
     margin-top: 2px;
 }
 
-/* Custom range */
-.custom-range {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-}
-
-.custom-range label {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.9rem;
-    color: #475569;
-}
-
-.custom-range input[type="date"] {
-    border: 1px solid #cbd5e1;
-    border-radius: 12px;
-    padding: 0.3rem 0.7rem;
-}
-
-/* Архив */
 #archiveList {
     list-style: none;
     display: flex;
@@ -502,7 +509,6 @@ h1 {
     opacity: 0.8;
 }
 
-/* Статистика детальная */
 #statsDetail {
     display: flex;
     flex-direction: column;
@@ -528,7 +534,6 @@ h1 {
     color: #0b1a2e;
 }
 
-/* Адаптив */
 @media (max-width: 1000px) {
     .app-container {
         flex-direction: column;
