@@ -8,13 +8,14 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- ЛЕВАЯ КОЛОНКА: список и добавление -->
+        <!-- ЛЕВАЯ КОЛОНКА -->
         <main class="left-panel">
             <header>
-                <h1>Мои задачи</h1>
+                <h1>📋 Мои задачи</h1>
+                <p class="subtitle">Поставь новую цель!</p>
             </header>
 
-            <!-- Блок планирования (дата и время) -->
+            <!-- Планирование (дата и время) -->
             <section class="planning" aria-label="Планирование задачи">
                 <div class="form-group">
                     <label for="taskDate">Дата</label>
@@ -37,7 +38,7 @@
                     <input
                         type="text"
                         id="taskInput"
-                        placeholder="Поставь новую цель!"
+                        placeholder="Введите новую задачу…"
                         required
                         autofocus
                     />
@@ -53,7 +54,7 @@
                 </ul>
             </section>
 
-            <!-- Статистика (общая) -->
+            <!-- Статистика общая -->
             <footer class="stats">
                 <div class="stats-grid">
                     <span class="stat-item">
@@ -72,7 +73,7 @@
             </footer>
         </main>
 
-        <!-- ПРАВАЯ КОЛОНКА: вкладки и календарь -->
+        <!-- ПРАВАЯ КОЛОНКА -->
         <aside class="right-panel">
             <!-- Вкладки -->
             <div class="tabs">
@@ -81,7 +82,6 @@
                 <button class="tab-btn" data-tab="stats">Статистика</button>
             </div>
 
-            <!-- Контент вкладок -->
             <div class="tab-content">
                 <!-- Календарь -->
                 <div id="tab-calendar" class="tab-pane active">
@@ -96,25 +96,24 @@
                         <span id="calendarTitle">Сегодня</span>
                         <button id="calendarNext">▶</button>
                     </div>
-                    <div id="calendarView">
-                        <!-- сюда рендерится календарь -->
+                    <div id="customRangeContainer" class="custom-range" style="display:none;">
+                        <label>С <input type="date" id="customStart" /></label>
+                        <label>По <input type="date" id="customEnd" /></label>
+                        <button id="applyCustomRange">Применить</button>
                     </div>
+                    <div id="calendarView"></div>
                 </div>
 
                 <!-- Архив -->
                 <div id="tab-archive" class="tab-pane">
                     <h3>Выполненные задачи</h3>
-                    <ul id="archiveList">
-                        <!-- заполняется JS -->
-                    </ul>
+                    <ul id="archiveList"></ul>
                 </div>
 
                 <!-- Статистика -->
                 <div id="tab-stats" class="tab-pane">
                     <h3>Детальная статистика</h3>
-                    <div id="statsDetail">
-                        <!-- заполняется JS -->
-                    </div>
+                    <div id="statsDetail"></div>
                 </div>
             </div>
         </aside>
