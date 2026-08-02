@@ -1,0 +1,289 @@
+/* style.css — внешняя таблица стилей */
+
+/* Общие сбросы и шрифты */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+    background: #f8fafc;
+    color: #0b1a2e;
+    line-height: 1.5;
+    padding: 2rem 1rem;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+}
+
+main {
+    max-width: 720px;
+    width: 100%;
+    background: #ffffff;
+    padding: 2rem 1.5rem;
+    border-radius: 28px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
+    align-self: flex-start;
+}
+
+/* Шапка */
+header {
+    margin-bottom: 1.75rem;
+}
+
+h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #0b1a2e;
+}
+
+.subtitle {
+    font-size: 1rem;
+    color: #64748b;
+    margin-top: 0.1rem;
+    font-weight: 400;
+    border-left: 4px solid #94a3b8;
+    padding-left: 0.75rem;
+}
+
+/* Блок даты и времени */
+.planning {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
+    background: #f1f5f9;
+    padding: 1rem 1.25rem;
+    border-radius: 18px;
+    margin-bottom: 1.75rem;
+}
+
+.planning .form-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1 0 auto;
+}
+
+.planning label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #334155;
+    white-space: nowrap;
+}
+
+.planning input {
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 0.4rem 0.7rem;
+    background: white;
+    font-size: 0.9rem;
+    color: #0b1a2e;
+    outline: none;
+    transition: border 0.2s;
+    flex: 1;
+    min-width: 100px;
+}
+
+.planning input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Форма добавления */
+.add-task {
+    margin-bottom: 2rem;
+}
+
+.task-form {
+    display: flex;
+    gap: 0.6rem;
+}
+
+.task-form input {
+    flex: 1;
+    padding: 0.7rem 1rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 20px;
+    font-size: 1rem;
+    outline: none;
+    transition: border 0.2s;
+    background: #fafcff;
+}
+
+.task-form input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.task-form button {
+    padding: 0.7rem 1.6rem;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 40px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    white-space: nowrap;
+}
+
+.task-form button:hover {
+    background: #2563eb;
+}
+
+.task-form button:active {
+    transform: scale(0.96);
+}
+
+/* Список задач */
+.task-list-section h2 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: #1e293b;
+    border-bottom: 2px dashed #e2e8f0;
+    padding-bottom: 0.5rem;
+}
+
+#taskList {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.task-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: #f8fafc;
+    padding: 0.65rem 1rem;
+    border-radius: 16px;
+    border: 1px solid #eef2f6;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.task-item:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+.task-item .task-text {
+    flex: 1;
+    font-size: 1rem;
+    color: #0b1a2e;
+    word-break: break-word;
+    transition: color 0.2s, text-decoration 0.2s;
+}
+
+.task-item.completed .task-text {
+    text-decoration: line-through;
+    color: #94a3b8;
+}
+
+/* Чекбокс (кастомный) */
+.task-item input[type="checkbox"] {
+    width: 1.2rem;
+    height: 1.2rem;
+    accent-color: #3b82f6;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* Кнопка удаления */
+.task-item .delete-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    border-radius: 30px;
+    transition: background 0.2s, color 0.2s;
+    flex-shrink: 0;
+}
+
+.task-item .delete-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* Статистика */
+.stats {
+    margin-top: 0.5rem;
+    padding-top: 1rem;
+    border-top: 2px solid #eef2f6;
+}
+
+.stats-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem 2.5rem;
+    justify-content: center;
+}
+
+.stat-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    font-size: 0.95rem;
+    color: #475569;
+}
+
+.stat-label {
+    font-weight: 400;
+}
+
+.stat-value {
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: #0b1a2e;
+    background: #f1f5f9;
+    padding: 0 0.6rem;
+    border-radius: 30px;
+    min-width: 1.8rem;
+    text-align: center;
+}
+
+/* Скрытый для доступности */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
+/* Адаптив */
+@media (max-width: 500px) {
+    main {
+        padding: 1.5rem 1rem;
+    }
+    .planning {
+        flex-direction: column;
+        gap: 0.7rem;
+    }
+    .planning .form-group {
+        flex-wrap: wrap;
+    }
+    .task-form {
+        flex-wrap: wrap;
+    }
+    .task-form button {
+        width: 100%;
+        justify-content: center;
+    }
+    .stats-grid {
+        gap: 0.8rem;
+        justify-content: space-around;
+    }
+}
