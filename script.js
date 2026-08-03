@@ -1,6 +1,3 @@
-// script.js — вся логика приложения "Планер задач"
-// ВСЕ ДАТЫ РАБОТАЮТ В ЛОКАЛЬНОМ ВРЕМЕНИ (без UTC-смещения)
-
 (function() {
     // --- Хранилище задач ---
     let tasks = [];
@@ -42,7 +39,6 @@
     function getWeekDays(refDate) {
         const d = parseLocalDate(refDate);
         const day = d.getDay(); // 0 - воскресенье
-        // Смещение до понедельника
         const diff = d.getDate() - day + (day === 0 ? -6 : 1);
         const monday = new Date(d);
         monday.setDate(diff);
@@ -65,8 +61,6 @@
         }
         return days;
     }
-
-    // Остальные функции (фильтрация задач, отображение времени) не зависят от часового пояса
 
     // Фильтрует задачи по дате (сравнение строк YYYY-MM-DD)
     function getTasksForDate(date) {
@@ -96,7 +90,6 @@
             try { tasks = JSON.parse(stored); }
             catch (_) { tasks = []; }
         }
-        // Если задач нет, создаём примеры для демонстрации (с сегодняшней датой)
         if (tasks.length === 0) {
             const today = getToday();
             tasks = [
@@ -165,7 +158,6 @@
             });
         }
 
-        // Обновляем общую статистику (по всем задачам)
         const total = tasks.length;
         const completed = tasks.filter(t => t.completed).length;
         document.getElementById('totalCount').textContent = total;
@@ -230,7 +222,7 @@
 
     // --- Календарь ---
     let currentView = 'day';
-    let selectedDate = getToday(); // всегда локальная дата
+    let selectedDate = getToday();
     let customStart = getToday();
     let customEnd = getToday();
 
@@ -462,24 +454,48 @@
         loadTasks();
         document.getElementById('taskDate').value = getToday();
 
-        // Добавление задачи
+        // ---- ВАЛИДАЦИЯ ВРЕМЕНИ ПРИ ДОБАВЛЕНИИ ЗАДАЧИ ----
+        const startTimeInput = document.getElementById('startTime');
+        const endTimeInput = document.getElementById('endTime');
+
+        startTimeInput.addEventListener('input', function() {
+            this.setCustomValidity('');
+        });
+        endTimeInput.addEventListener('input', function() {
+            document.getElementById('startTime').setCustomValidity('');
+        });
+
         document.getElementById('taskForm').addEventListener('submit', function(e) {
             e.preventDefault();
+
             const input = document.getElementById('taskInput');
             const text = input.value.trim();
-            if (!text) return;
+            if (!text) {
+                input.setCustomValidity('Введите текст задачи');
+                input.reportValidity();
+                return;
+            } else {
+                input.setCustomValidity('');
+            }
+
+            const startVal = startTimeInput.value;
+            const endVal = endTimeInput.value;
+            if (startVal && endVal && startVal > endVal) {
+                startTimeInput.setCustomValidity('Время начала не может быть позже времени окончания');
+                startTimeInput.reportValidity();
+                return;
+            } else {
+                startTimeInput.setCustomValidity('');
+            }
 
             const date = document.getElementById('taskDate').value || getToday();
-            const startTime = document.getElementById('startTime').value || '';
-            const endTime = document.getElementById('endTime').value || '';
-
             const newTask = {
                 id: Date.now() + Math.random().toString(36).slice(2, 6),
                 text: text,
                 completed: false,
                 date: date,
-                startTime: startTime,
-                endTime: endTime
+                startTime: startVal || '',
+                endTime: endVal || ''
             };
             tasks.push(newTask);
             saveTasks();
@@ -488,6 +504,49 @@
             if (document.querySelector('.tab-btn.active')?.dataset.tab === 'calendar') {
                 renderCalendar();
             }
+        });
+
+        // ---- ВАЛИДАЦИЯ ДИАПАЗОНА "СВОЙ ПРОМЕЖУТОК" (максимум 31 день) ----
+        const customStartInput = document.getElementById('customStart');
+        const customEndInput = document.getElementById('customEnd');
+
+        customStartInput.addEventListener('input', function() {
+            customEndInput.setCustomValidity('');
+        });
+        customEndInput.addEventListener('input', function() {
+            this.setCustomValidity('');
+        });
+
+        document.getElementById('applyCustomRange').addEventListener('click', function() {
+            customStartInput.setCustomValidity('');
+            customEndInput.setCustomValidity('');
+
+            const start = customStartInput.value;
+            const end = customEndInput.value;
+
+            if (!start || !end) {
+                customEndInput.setCustomValidity('Выберите обе даты');
+                customEndInput.reportValidity();
+                return;
+            }
+            if (start > end) {
+                customEndInput.setCustomValidity('Дата начала не может быть позже даты конца');
+                customEndInput.reportValidity();
+                return;
+            }
+
+            const diffTime = Math.abs(parseLocalDate(end) - parseLocalDate(start));
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            // Лимит: не более 31 календарного дня 
+            if (diffDays > 30) {
+                customEndInput.setCustomValidity('Диапазон не должен превышать 31 день');
+                customEndInput.reportValidity();
+                return;
+            }
+
+            customStart = start;
+            customEnd = end;
+            renderCalendar();
         });
 
         // Переключение вкладок
@@ -506,17 +565,13 @@
                 const customContainer = document.getElementById('customRangeContainer');
                 if (currentView === 'custom') {
                     customContainer.style.display = 'flex';
-                    document.getElementById('customStart').value = customStart;
-                    document.getElementById('customEnd').value = customEnd;
+                    customStartInput.value = customStart;
+                    customEndInput.value = customEnd;
                 } else {
                     customContainer.style.display = 'none';
                 }
                 const controls = document.getElementById('calendarControls');
-                if (currentView === 'all') {
-                    controls.style.display = 'none';
-                } else {
-                    controls.style.display = 'flex';
-                }
+                controls.style.display = (currentView === 'all') ? 'none' : 'flex';
                 renderCalendar();
             });
         });
@@ -542,29 +597,6 @@
             else return;
             selectedDate = formatLocalDate(d);
             renderAll();
-        });
-
-        // Применение custom-диапазона с проверкой на 30 дней
-        document.getElementById('applyCustomRange').addEventListener('click', function() {
-            const start = document.getElementById('customStart').value;
-            const end = document.getElementById('customEnd').value;
-            if (!start || !end) {
-                alert('Выберите обе даты');
-                return;
-            }
-            if (start > end) {
-                alert('Дата начала не может быть позже даты конца');
-                return;
-            }
-            const diffTime = Math.abs(parseLocalDate(end) - parseLocalDate(start));
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            if (diffDays > 31) {
-                alert('Диапазон не должен превышать 31 день');
-                return;
-            }
-            customStart = start;
-            customEnd = end;
-            renderCalendar();
         });
 
         // Старт
