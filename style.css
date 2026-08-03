@@ -10,8 +10,8 @@
 /* Стили для тела страницы: фон, шрифт, центрирование по горизонтали */
 body {
     font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
-    background: #f1f5f9;
-    color: #0b1a2e;
+    background: #202326;
+    color: #E2EEEA;
     padding: 1.5rem;
     min-height: 100vh;
     display: flex;
@@ -31,7 +31,7 @@ body {
 /* Левая панель: белый фон, скругления, тень, отступы */
 .left-panel {
     flex: 1.2;
-    background: #ffffff;
+    background: #121212;
     padding: 2rem 1.8rem;
     border-radius: 28px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
@@ -41,7 +41,7 @@ body {
 /* Правая панель: аналогично левой, но чуть уже */
 .right-panel {
     flex: 1;
-    background: #ffffff;
+    background: #121212;
     padding: 1.8rem 1.5rem;
     border-radius: 28px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
@@ -58,13 +58,13 @@ h1 {
     font-size: 2rem;
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: #0b1a2e;
+    color: #ffffff;
 }
 
 /* Стиль для подзаголовка (не используется в текущей версии, но оставлен на случай) */
 .subtitle {
     font-size: 1rem;
-    color: #64748b;
+    color: #E2EEEA;
     margin-top: 0.1rem;
     border-left: 4px solid #94a3b8;
     padding-left: 0.75rem;
@@ -75,7 +75,7 @@ h1 {
     display: flex;
     flex-wrap: wrap;
     gap: 1rem 1.5rem;
-    background: #f1f5f9;
+    background: #202326;
     padding: 0.8rem 1.2rem;
     border-radius: 18px;
     margin-bottom: 1.5rem;
@@ -93,18 +93,18 @@ h1 {
 .planning label {
     font-size: 0.85rem;
     font-weight: 500;
-    color: #334155;
+    color: #C1D0E9;
     white-space: nowrap;
 }
 
 /* Поля ввода даты и времени */
 .planning input {
-    border: 1px solid #cbd5e1;
+    border: 1px solid #333539;
     border-radius: 12px;
     padding: 0.3rem 0.7rem;
-    background: white;
+    background: #121212;
     font-size: 0.9rem;
-    color: #0b1a2e;
+    color: #ffffff;
     outline: none;
     transition: border 0.2s;
     flex: 1;
@@ -132,12 +132,12 @@ h1 {
 .task-form input {
     flex: 1;
     padding: 0.7rem 1rem;
-    border: 2px solid #e2e8f0;
+    border: 2px solid #434548;
     border-radius: 20px;
     font-size: 1rem;
     outline: none;
     transition: border 0.2s;
-    background: #fafcff;
+    background: #1C1E20;
 }
 
 /* Фокус для поля ввода задачи */
@@ -173,8 +173,8 @@ h1 {
     font-size: 1.2rem;
     font-weight: 600;
     margin-bottom: 1rem;
-    color: #1e293b;
-    border-bottom: 2px dashed #e2e8f0;
+    color: #E2EEFF;
+    border-bottom: 2px dashed #434548;
     padding-bottom: 0.5rem;
 }
 
@@ -194,16 +194,16 @@ h1 {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    background: #f8fafc;
+    background: #1E1F21;
     padding: 0.6rem 1rem;
     border-radius: 16px;
-    border: 1px solid #eef2f6;
+    border: 1px solid #4B4C4E;
     transition: background 0.15s, border-color 0.15s;
 }
 
 .task-item:hover {
-    background: #f1f5f9;
-    border-color: #cbd5e1;
+    background: #1E1F21;
+    border-color: #2370ce;
 }
 
 /* Чекбокс задачи */
@@ -215,7 +215,7 @@ h1 {
 .task-item .task-time {
     font-size: 1.05rem;
     font-weight: 400;
-    color: #1e293b;
+    color: #E2EEEA;
     min-width: 110px;
     flex-shrink: 0;
     letter-spacing: -0.01em;
@@ -225,7 +225,7 @@ h1 {
 .task-item .task-text {
     flex: 1;
     font-size: 0.95rem;
-    color: #0b1a2e;
+    color: #F2FFEA;
     word-break: break-word;
 }
 
@@ -239,15 +239,19 @@ h1 {
 
 /* Стиль для выполненной задачи — зачёркнутый текст */
 .task-item.completed .task-text {
-    text-decoration: line-through;
-    color: #94a3b8;
+    color: #5a6068;
 }
 
-/* Чекбокс внутри задачи */
+.task-item.completed .task-time {
+    color: #5a6068;
+}
+
+/* Чекбокс внутри задачи */   /* !!! Цвет не работает !!! */
 .task-item input[type="checkbox"] {
     width: 1.1rem;
     height: 1.1rem;
-    accent-color: #3b82f6;
+    border: 1px solid #098123;
+    background-color: #098123;
     cursor: pointer;
 }
 
@@ -266,8 +270,8 @@ h1 {
 }
 
 .task-item .delete-btn:hover {
-    background: #fee2e2;
-    color: #dc2626;
+    background: #3A2627;
+    color: #FF5141;
 }
 
 /* Блок статистики в левой панели */
