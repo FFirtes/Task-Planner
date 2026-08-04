@@ -1,16 +1,13 @@
+// script.js — вся логика приложения
 (function() {
-    // --- Хранилище задач ---
     let tasks = [];
 
-    // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ЛОКАЛЬНЫМИ ДАТАМИ ---
-
-    // Преобразует строку "YYYY-MM-DD" в объект Date (локальное время, без UTC)
+    // --- Работа с датами (локальное время) ---
     function parseLocalDate(dateStr) {
         const parts = dateStr.split('-').map(Number);
         return new Date(parts[0], parts[1] - 1, parts[2]);
     }
 
-    // Форматирует объект Date в строку "YYYY-MM-DD" (локальное время)
     function formatLocalDate(date) {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -18,27 +15,23 @@
         return `${year}-${month}-${day}`;
     }
 
-    // Возвращает сегодняшнюю дату в формате "YYYY-MM-DD" (локальное время)
     function getToday() {
         return formatLocalDate(new Date());
     }
 
-    // Форматирует дату в читаемый вид: "2 авг. 2026 г." (локальное время)
     function formatDate(dateStr) {
         const d = parseLocalDate(dateStr);
         return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
     }
 
-    // Краткий формат: "2 авг."
     function formatDateShort(dateStr) {
         const d = parseLocalDate(dateStr);
         return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
     }
 
-    // Возвращает массив из 7 дат (понедельник – воскресенье) для указанной даты (локальное время)
     function getWeekDays(refDate) {
         const d = parseLocalDate(refDate);
-        const day = d.getDay(); // 0 - воскресенье
+        const day = d.getDay();
         const diff = d.getDate() - day + (day === 0 ? -6 : 1);
         const monday = new Date(d);
         monday.setDate(diff);
@@ -51,7 +44,6 @@
         return days;
     }
 
-    // Возвращает массив всех дней указанного месяца (локальное время)
     function getMonthDays(year, month) {
         const days = [];
         const date = new Date(year, month - 1, 1);
@@ -62,17 +54,14 @@
         return days;
     }
 
-    // Фильтрует задачи по дате (сравнение строк YYYY-MM-DD)
     function getTasksForDate(date) {
         return tasks.filter(t => t.date === date);
     }
 
-    // Фильтрует задачи по диапазону дат
     function getTasksForRange(startDate, endDate) {
         return tasks.filter(t => t.date >= startDate && t.date <= endDate);
     }
 
-    // Формирует строку времени для отображения (если время не указано — "На весь день")
     function getTimeDisplay(task) {
         if (task.startTime && task.endTime) {
             return `${task.startTime} – ${task.endTime}`;
@@ -83,7 +72,7 @@
         }
     }
 
-    // --- Загрузка и сохранение задач ---
+    // --- Загрузка / сохранение ---
     function loadTasks() {
         const stored = localStorage.getItem('tasks');
         if (stored) {
@@ -105,67 +94,281 @@
         localStorage.setItem('tasks', JSON.stringify(tasks));
     }
 
-    // --- Рендеринг левой панели (задачи на выбранную дату) ---
-    function renderLeftPanelForDate(date) {
-        const listContainer = document.getElementById('taskListForDate');
-        const titleEl = document.getElementById('selectedDateTitle');
+    // --- Создание элемента задачи с поддержкой редактирования времени и текста ---
+    function createTaskElement(task, onUpdate) {
+        const li = document.createElement('li');
+        li.className = 'task-item' + (task.completed ? ' completed' : '');
+        li.dataset.id = task.id;
+
+        // Чекбокс
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = task.completed;
+        checkbox.className = 'task-checkbox';
+        checkbox.addEventListener('change', () => {
+            task.completed = checkbox.checked;
+            saveTasks();
+            if (onUpdate) onUpdate();
+        });
+
+        // Статическое время
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'task-time';
+        timeSpan.textContent = getTimeDisplay(task);
+
+        // Поля редактирования времени
+        const startInput = document.createElement('input');
+        startInput.type = 'time';
+        startInput.className = 'edit-time-input';
+        startInput.value = task.startTime || '';
+
+        const endInput = document.createElement('input');
+        endInput.type = 'time';
+        endInput.className = 'edit-time-input';
+        endInput.value = task.endTime || '';
+
+        const separator = document.createElement('span');
+        separator.className = 'edit-time-separator';
+        separator.textContent = ' – ';
+
+        // Текст задачи
+        const textSpan = document.createElement('span');
+        textSpan.className = 'task-text';
+        textSpan.textContent = task.text;
+
+        // Кнопка редактирования
+        const editBtn = document.createElement('button');
+        editBtn.className = 'edit-btn';
+        editBtn.innerHTML = '✎';
+        editBtn.setAttribute('aria-label', 'Редактировать задачу');
+        editBtn.title = 'Редактировать';
+
+        // Кнопка удаления
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.innerHTML = '✕';
+        deleteBtn.setAttribute('aria-label', 'Удалить задачу');
+        deleteBtn.addEventListener('click', () => {
+            tasks = tasks.filter(t => t.id !== task.id);
+            saveTasks();
+            if (onUpdate) onUpdate();
+        });
+
+        // --- Логика редактирования ---
+        let isEditing = false;
+        let originalText = task.text;
+        let originalStart = task.startTime || '';
+        let originalEnd = task.endTime || '';
+
+        // Функция обновления данных задачи без завершения режима
+        function updateData() {
+            const newText = textSpan.textContent.trim();
+            if (newText === '') {
+                // Если текст пустой, отменяем
+                cancelEdit();
+                return;
+            }
+            const newStart = startInput.value;
+            const newEnd = endInput.value;
+            if (newStart && newEnd && newStart > newEnd) {
+                alert('Время начала не может быть позже времени окончания');
+                return false;
+            }
+            task.text = newText;
+            task.startTime = newStart || '';
+            task.endTime = newEnd || '';
+            saveTasks();
+            return true;
+        }
+
+        function startEditing() {
+            if (isEditing) return;
+            isEditing = true;
+            originalText = textSpan.textContent;
+            originalStart = task.startTime || '';
+            originalEnd = task.endTime || '';
+
+            timeSpan.style.display = 'none';
+            startInput.classList.add('editing');
+            endInput.classList.add('editing');
+            separator.classList.add('editing');
+            startInput.value = task.startTime || '';
+            endInput.value = task.endTime || '';
+
+            textSpan.contentEditable = true;
+            textSpan.classList.add('editing');
+            textSpan.focus();
+            const range = document.createRange();
+            range.selectNodeContents(textSpan);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+
+        function saveEdit() {
+            if (!isEditing) return;
+            if (updateData()) {
+                finishEditing();
+                if (onUpdate) onUpdate();
+            }
+        }
+
+        function cancelEdit() {
+            if (!isEditing) return;
+            textSpan.textContent = originalText;
+            task.startTime = originalStart;
+            task.endTime = originalEnd;
+            finishEditing();
+            timeSpan.textContent = getTimeDisplay(task);
+            if (onUpdate) onUpdate();
+        }
+
+        function finishEditing() {
+            isEditing = false;
+            textSpan.contentEditable = false;
+            textSpan.classList.remove('editing');
+            startInput.classList.remove('editing');
+            endInput.classList.remove('editing');
+            separator.classList.remove('editing');
+            timeSpan.style.display = 'inline';
+            textSpan.textContent = task.text;
+            timeSpan.textContent = getTimeDisplay(task);
+        }
+
+        // Обработчики событий для кнопки редактирования
+        editBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (isEditing) {
+                saveEdit();
+            } else {
+                startEditing();
+            }
+        });
+
+        // Обработчики для текста
+        textSpan.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveEdit();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        });
+
+        textSpan.addEventListener('blur', function(e) {
+            if (isEditing) {
+                // Если фокус переходит на одно из полей времени, не завершаем редактирование
+                const related = e.relatedTarget;
+                if (related === startInput || related === endInput) {
+                    // Просто обновляем данные, не завершая
+                    updateData();
+                    return;
+                }
+                // Иначе сохраняем и завершаем
+                saveEdit();
+            }
+        });
+
+        textSpan.addEventListener('click', function(e) {
+            if (isEditing) e.stopPropagation();
+        });
+
+        // Обработчики для полей времени
+        startInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveEdit();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        });
+
+        startInput.addEventListener('blur', function(e) {
+            if (isEditing) {
+                const related = e.relatedTarget;
+                if (related === textSpan || related === endInput) {
+                    updateData();
+                    return;
+                }
+                saveEdit();
+            }
+        });
+
+        startInput.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+
+        endInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveEdit();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        });
+
+        endInput.addEventListener('blur', function(e) {
+            if (isEditing) {
+                const related = e.relatedTarget;
+                if (related === textSpan || related === startInput) {
+                    updateData();
+                    return;
+                }
+                saveEdit();
+            }
+        });
+
+        endInput.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+
+        // Сборка элемента: чекбокс, статическое время, поля времени (скрыты), текст, карандаш, крестик
+        li.appendChild(checkbox);
+        li.appendChild(timeSpan);
+        li.appendChild(startInput);
+        li.appendChild(separator);
+        li.appendChild(endInput);
+        li.appendChild(textSpan);
+        li.appendChild(editBtn);
+        li.appendChild(deleteBtn);
+
+        return li;
+    }
+
+    // --- Рендеринг задач для выбранной даты ---
+    function renderTasksForDate(date) {
+        const listContainer = document.getElementById('tasksForDateList');
+        const titleEl = document.getElementById('tasksForDateTitle');
         titleEl.textContent = `Задачи на ${formatDate(date)}`;
 
         const tasksForDate = getTasksForDate(date);
-        listContainer.innerHTML = '';
+        tasksForDate.sort((a, b) => {
+            if (a.completed !== b.completed) return a.completed ? 1 : -1;
+            if (a.startTime && b.startTime) return a.startTime.localeCompare(b.startTime);
+            return 0;
+        });
 
+        listContainer.innerHTML = '';
         if (tasksForDate.length === 0) {
             listContainer.innerHTML = '<li class="task-item" style="justify-content:center; background:transparent; border:none; color:#94a3b8; padding:1rem 0;">Нет задач</li>';
         } else {
             tasksForDate.forEach(task => {
-                const li = document.createElement('li');
-                li.className = 'task-item' + (task.completed ? ' completed' : '');
-                li.dataset.id = task.id;
-
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.checked = task.completed;
-                checkbox.className = 'task-checkbox';
-                checkbox.addEventListener('change', () => {
-                    task.completed = checkbox.checked;
-                    saveTasks();
-                    renderAll();
+                const li = createTaskElement(task, () => {
+                    renderTasksForDate(date);
+                    const activeTab = document.querySelector('.tab-btn.active');
+                    if (activeTab && activeTab.dataset.tab === 'calendar') {
+                        renderCalendar();
+                    }
                 });
-
-                const timeSpan = document.createElement('span');
-                timeSpan.className = 'task-time';
-                timeSpan.textContent = getTimeDisplay(task);
-
-                const textSpan = document.createElement('span');
-                textSpan.className = 'task-text';
-                textSpan.textContent = task.text;
-
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'delete-btn';
-                deleteBtn.innerHTML = '✕';
-                deleteBtn.setAttribute('aria-label', 'Удалить задачу');
-                deleteBtn.addEventListener('click', () => {
-                    tasks = tasks.filter(t => t.id !== task.id);
-                    saveTasks();
-                    renderAll();
-                });
-
-                li.appendChild(checkbox);
-                li.appendChild(timeSpan);
-                li.appendChild(textSpan);
-                li.appendChild(deleteBtn);
                 listContainer.appendChild(li);
             });
         }
-
-        const total = tasks.length;
-        const completed = tasks.filter(t => t.completed).length;
-        document.getElementById('totalCount').textContent = total;
-        document.getElementById('completedCount').textContent = completed;
-        document.getElementById('incompleteCount').textContent = total - completed;
     }
 
-    // --- Рендеринг списка всех задач (вид "Все задачи") ---
+    // --- Рендеринг списка всех задач ---
     function renderAllTasksView(container) {
         container.innerHTML = '';
         if (tasks.length === 0) {
@@ -179,42 +382,13 @@
             return a.date.localeCompare(b.date);
         });
         sorted.forEach(task => {
-            const li = document.createElement('li');
-            li.className = 'task-item' + (task.completed ? ' completed' : '');
-            li.dataset.id = task.id;
-
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.checked = task.completed;
-            checkbox.className = 'task-checkbox';
-            checkbox.addEventListener('change', () => {
-                task.completed = checkbox.checked;
-                saveTasks();
-                renderAll();
+            const li = createTaskElement(task, () => {
+                renderAllTasksView(container);
+                const activeTab = document.querySelector('.tab-btn.active');
+                if (activeTab && activeTab.dataset.tab === 'calendar') {
+                    renderCalendar();
+                }
             });
-
-            const timeSpan = document.createElement('span');
-            timeSpan.className = 'task-time';
-            timeSpan.textContent = getTimeDisplay(task);
-
-            const textSpan = document.createElement('span');
-            textSpan.className = 'task-text';
-            textSpan.textContent = task.text;
-
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'delete-btn';
-            deleteBtn.innerHTML = '✕';
-            deleteBtn.setAttribute('aria-label', 'Удалить задачу');
-            deleteBtn.addEventListener('click', () => {
-                tasks = tasks.filter(t => t.id !== task.id);
-                saveTasks();
-                renderAll();
-            });
-
-            li.appendChild(checkbox);
-            li.appendChild(timeSpan);
-            li.appendChild(textSpan);
-            li.appendChild(deleteBtn);
             wrapper.appendChild(li);
         });
         container.appendChild(wrapper);
@@ -277,45 +451,27 @@
             }
         }
 
-        // Отрисовка календаря
         if (currentView === 'day') {
-            container.innerHTML = `<div class="day-view"><h4>${formatDate(selectedDate)}</h4></div>`;
-        } else if (currentView === 'week') {
-            let html = '<div class="week-view">';
-            const todayStr = getToday();
-            daysArray.forEach(day => {
-                const dayTasks = getTasksForDate(day);
-                const hasTasks = dayTasks.length > 0;
-                const isToday = day === todayStr;
-                const d = parseLocalDate(day);
-                const dayNum = d.getDate();
-                const dayLabel = d.toLocaleDateString('ru-RU', { weekday: 'short' });
-                html += `<div class="week-cell ${hasTasks ? 'has-tasks' : ''} ${isToday ? 'today' : ''}" data-date="${day}">
-                            <span class="day-number">${dayNum}</span>
-                            <span class="day-label">${dayLabel}</span>
-                            <div class="task-indicator">
-                                ${hasTasks ? `<span class="task-dot"></span><span class="task-dot"></span>` : ''}
-                            </div>
-                            <span style="font-size:0.65rem; color:#64748b;">${dayTasks.length} задач</span>
-                        </div>`;
-            });
-            html += '</div>';
-            container.innerHTML = html;
-            attachDateClickHandlers('.week-cell');
-        } else if (currentView === 'month') {
-            const d = parseLocalDate(selectedDate);
-            const year = d.getFullYear();
-            const month = d.getMonth() + 1;
-            const firstDay = new Date(year, month - 1, 1).getDay();
-            const offset = (firstDay === 0) ? 6 : firstDay - 1;
-            let html = '<div class="month-view">';
-            const weekDays = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+            container.innerHTML = '';
+        } else {
+            const weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+            let html = `<div class="${currentView}-view">`;
+            html += `<div class="calendar-weekdays">`;
             weekDays.forEach(wd => {
-                html += `<div style="font-weight:600; font-size:0.7rem; color:#64748b; text-align:center;">${wd}</div>`;
+                html += `<span class="weekday-label">${wd}</span>`;
             });
+            html += `</div>`;
+            html += `<div class="calendar-grid">`;
             const todayStr = getToday();
-            for (let i = 0; i < offset; i++) {
-                html += `<div class="month-cell empty"></div>`;
+            if (currentView === 'month') {
+                const d = parseLocalDate(selectedDate);
+                const year = d.getFullYear();
+                const month = d.getMonth() + 1;
+                const firstDay = new Date(year, month - 1, 1).getDay();
+                const offset = (firstDay === 0) ? 6 : firstDay - 1;
+                for (let i = 0; i < offset; i++) {
+                    html += `<div class="calendar-cell empty"></div>`;
+                }
             }
             daysArray.forEach(day => {
                 const dayTasks = getTasksForDate(day);
@@ -323,47 +479,19 @@
                 const isToday = day === todayStr;
                 const dt = parseLocalDate(day);
                 const dayNum = dt.getDate();
-                const dayLabel = dt.toLocaleDateString('ru-RU', { weekday: 'short' });
-                html += `<div class="month-cell ${hasTasks ? 'has-tasks' : ''} ${isToday ? 'today' : ''}" data-date="${day}">
+                html += `<div class="calendar-cell ${hasTasks ? 'has-tasks' : ''} ${isToday ? 'today' : ''}" data-date="${day}">
                             <span class="day-number">${dayNum}</span>
-                            <span class="day-label">${dayLabel}</span>
-                            <div class="task-indicator">
-                                ${hasTasks ? `<span class="task-dot"></span><span class="task-dot"></span>` : ''}
-                            </div>
-                            <span style="font-size:0.65rem; color:#64748b;">${dayTasks.length} задач</span>
+                            ${hasTasks ? `<span class="task-badge">${dayTasks.length}</span>` : ''}
                         </div>`;
             });
-            html += '</div>';
+            html += `</div></div>`;
             container.innerHTML = html;
-            attachDateClickHandlers('.month-cell:not(.empty)');
-        } else if (currentView === 'custom') {
-            let html = '<div class="custom-view">';
-            const todayStr = getToday();
-            daysArray.forEach(day => {
-                const dayTasks = getTasksForDate(day);
-                const hasTasks = dayTasks.length > 0;
-                const isToday = day === todayStr;
-                const dt = parseLocalDate(day);
-                const dayNum = dt.getDate();
-                const dayLabel = dt.toLocaleDateString('ru-RU', { weekday: 'short' });
-                html += `<div class="custom-cell ${hasTasks ? 'has-tasks' : ''} ${isToday ? 'today' : ''}" data-date="${day}">
-                            <span class="day-number">${dayNum}</span>
-                            <span class="day-label">${dayLabel}</span>
-                            <div class="task-indicator">
-                                ${hasTasks ? `<span class="task-dot"></span><span class="task-dot"></span>` : ''}
-                            </div>
-                            <span style="font-size:0.65rem; color:#64748b;">${dayTasks.length} задач</span>
-                        </div>`;
-            });
-            html += '</div>';
-            container.innerHTML = html;
-            attachDateClickHandlers('.custom-cell');
+            attachDateClickHandlers('.calendar-cell:not(.empty)');
         }
 
-        renderLeftPanelForDate(selectedDate);
+        renderTasksForDate(selectedDate);
     }
 
-    // Универсальный обработчик кликов по ячейкам с датами
     function attachDateClickHandlers(selector) {
         document.querySelectorAll(selector).forEach(el => {
             el.addEventListener('click', function() {
@@ -372,11 +500,7 @@
                     selectedDate = date;
                     document.querySelectorAll(selector).forEach(c => c.style.outline = 'none');
                     this.style.outline = '2px solid #3b82f6';
-                    if (currentView !== 'all') {
-                        renderAll();
-                    } else {
-                        renderLeftPanelForDate(selectedDate);
-                    }
+                    renderAll();
                 }
             });
         });
@@ -402,12 +526,14 @@
             archiveList.innerHTML = '<li class="task-item" style="justify-content:center; background:transparent; border:none; color:#94a3b8;">Нет выполненных задач</li>';
         } else {
             completedTasks.sort((a, b) => a.date.localeCompare(b.date));
-            completedTasks.forEach(t => {
-                const li = document.createElement('li');
-                li.className = 'task-item';
-                li.innerHTML = `<span class="task-time">${getTimeDisplay(t)}</span>
-                                <span class="task-text">${t.text}</span>
-                                <span style="color:green; margin-left:auto;">✅</span>`;
+            completedTasks.forEach(task => {
+                const li = createTaskElement(task, () => {
+                    renderArchive();
+                    const activeTab = document.querySelector('.tab-btn.active');
+                    if (activeTab && activeTab.dataset.tab === 'calendar') {
+                        renderCalendar();
+                    }
+                });
                 archiveList.appendChild(li);
             });
         }
@@ -437,9 +563,8 @@
         container.innerHTML = html;
     }
 
-    // Главная функция обновления
     function renderAll() {
-        renderLeftPanelForDate(selectedDate);
+        renderTasksForDate(selectedDate);
         const activeTab = document.querySelector('.tab-btn.active');
         if (activeTab) {
             const tabId = activeTab.dataset.tab;
@@ -454,7 +579,7 @@
         loadTasks();
         document.getElementById('taskDate').value = getToday();
 
-        // ---- ВАЛИДАЦИЯ ВРЕМЕНИ ПРИ ДОБАВЛЕНИИ ЗАДАЧИ ----
+        // Валидация времени при добавлении
         const startTimeInput = document.getElementById('startTime');
         const endTimeInput = document.getElementById('endTime');
 
@@ -501,12 +626,9 @@
             saveTasks();
             input.value = '';
             renderAll();
-            if (document.querySelector('.tab-btn.active')?.dataset.tab === 'calendar') {
-                renderCalendar();
-            }
         });
 
-        // ---- ВАЛИДАЦИЯ ДИАПАЗОНА "СВОЙ ПРОМЕЖУТОК" (максимум 31 день) ----
+        // Валидация custom диапазона
         const customStartInput = document.getElementById('customStart');
         const customEndInput = document.getElementById('customEnd');
 
@@ -537,7 +659,6 @@
 
             const diffTime = Math.abs(parseLocalDate(end) - parseLocalDate(start));
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            // Лимит: не более 31 календарного дня 
             if (diffDays > 30) {
                 customEndInput.setCustomValidity('Диапазон не должен превышать 31 день');
                 customEndInput.reportValidity();
@@ -556,7 +677,7 @@
             });
         });
 
-        // Переключение видов календаря
+        // Переключение видов
         document.querySelectorAll('.view-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
@@ -576,7 +697,7 @@
             });
         });
 
-        // Навигация календаря
+        // Навигация
         document.getElementById('calendarPrev').addEventListener('click', function() {
             if (currentView === 'all') return;
             const d = parseLocalDate(selectedDate);
