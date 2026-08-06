@@ -8,14 +8,34 @@
 </head>
 <body>
     <div class="app-container">
+        <!-- ЛЕВАЯ КОЛОНКА -->
         <main class="left-panel">
             <header>
                 <h1>📋 Мои задачи</h1>
             </header>
+
+            <!-- Блок ГРУПП -->
+            <section class="groups-section">
+                <h3>Группы</h3>
+                <div class="groups-list" id="groupsList">
+                    <!-- Группы будут добавлены скриптом -->
+                </div>
+                <div class="group-add">
+                    <input type="text" id="groupNameInput" placeholder="Название группы" />
+                    <input type="color" id="groupColorInput" value="#3b82f6" class="group-color-picker" />
+                    <button id="addGroupBtn" class="round-btn">+</button>
+                </div>
+            </section>
+
+            <!-- Блок планирования (дата, время, период) -->
             <section class="planning" aria-label="Планирование задачи">
                 <div class="form-group">
                     <label for="taskDate">Дата</label>
                     <input type="date" id="taskDate" />
+                </div>
+                <div class="form-group">
+                    <label for="repeatEnd">Повторять до</label>
+                    <input type="date" id="repeatEnd" />
                 </div>
                 <div class="form-group">
                     <label for="startTime">Время начала</label>
@@ -26,20 +46,45 @@
                     <input type="time" id="endTime" />
                 </div>
             </section>
+
+            <!-- Форма добавления задачи -->
             <section class="add-task" aria-label="Добавление задачи">
                 <form id="taskForm" class="task-form">
-                    <label for="taskInput" class="visually-hidden">Новая задача</label>
-                    <input
-                        type="text"
-                        id="taskInput"
-                        placeholder="Поставь новую цель!"
-                        required
-                        autofocus
-                    />
+                    <!-- Группа -->
+                    <div class="form-group full-width">
+                        <label for="groupSelect">Группа</label>
+                        <select id="groupSelect">
+                            <option value="">Без группы</option>
+                        </select>
+                    </div>
+                    <!-- Текст задачи -->
+                    <div class="form-group full-width">
+                        <label for="taskInput">Текст задачи</label>
+                        <input type="text" id="taskInput" placeholder="Введите задачу" required />
+                    </div>
+                    <!-- Повторяемость (только кнопки) -->
+                    <div class="form-group full-width repeat-group">
+                        <label>Повторение</label>
+                        <div class="repeat-controls">
+                            <div class="repeat-buttons" id="repeatButtons">
+                                <button type="button" class="repeat-btn active" data-value="none">Нет</button>
+                                <button type="button" class="repeat-btn" data-value="daily">Ежедневно</button>
+                                <button type="button" class="repeat-btn day-btn" data-value="1">ПН</button>
+                                <button type="button" class="repeat-btn day-btn" data-value="2">ВТ</button>
+                                <button type="button" class="repeat-btn day-btn" data-value="3">СР</button>
+                                <button type="button" class="repeat-btn day-btn" data-value="4">ЧТ</button>
+                                <button type="button" class="repeat-btn day-btn" data-value="5">ПТ</button>
+                                <button type="button" class="repeat-btn day-btn" data-value="6">СБ</button>
+                                <button type="button" class="repeat-btn day-btn" data-value="0">ВС</button>
+                            </div>
+                        </div>
+                    </div>
                     <button type="submit" id="addBtn">Добавить</button>
                 </form>
             </section>
         </main>
+
+        <!-- ПРАВАЯ КОЛОНКА -->
         <aside class="right-panel">
             <div class="tabs">
                 <button class="tab-btn active" data-tab="calendar">Календарь</button>
