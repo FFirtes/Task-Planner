@@ -1,4 +1,4 @@
-// script.js — обновлённая версия
+// script.js — обновлённая версия с поиском следующей задачи на завтра и без кавычек
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/Task-Planner/sw.js')
     .then(() => console.log('Service Worker зарегистрирован!'))
@@ -38,6 +38,9 @@ if ('serviceWorker' in navigator) {
             if (task.completedDates === undefined) {
                 task.completedDates = [];
             }
+            if (task.pinnedDates === undefined) {
+                task.pinnedDates = [];
+            }
         });
         saveData();
     }
@@ -68,6 +71,20 @@ if ('serviceWorker' in navigator) {
         const d = new Date();
         d.setDate(d.getDate() + 1);
         return formatLocalDate(d);
+    }
+
+    function getDayName(dateStr) {
+        const d = parseLocalDate(dateStr);
+        return d.toLocaleDateString('ru-RU', { weekday: 'short' });
+    }
+
+    function formatDateWithDay(dateStr) {
+        const today = getToday();
+        const tomorrow = getTomorrow();
+        const dateObj = parseLocalDate(dateStr);
+        if (dateStr === today) return `Сегодня, ${getDayName(dateStr)}.`;
+        if (dateStr === tomorrow) return `Завтра, ${getDayName(dateStr)}.`;
+        return `${dateObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}, ${getDayName(dateStr)}.`;
     }
 
     function formatDate(dateStr) {
@@ -171,8 +188,28 @@ if ('serviceWorker' in navigator) {
         return parts.join(' ');
     }
 
+    // --- Функция сортировки задач для списка ---
+    function sortTasks(tasks, currentDate) {
+        return tasks.slice().sort((a, b) => {
+            const aPinned = a.pinnedDates && (a.pinnedDates.includes(currentDate) || a.pinnedDates.includes('all'));
+            const bPinned = b.pinnedDates && (b.pinnedDates.includes(currentDate) || b.pinnedDates.includes('all'));
+            if (aPinned && !bPinned) return -1;
+            if (!aPinned && bPinned) return 1;
+
+            const aCompleted = a.completedDates && a.completedDates.includes(currentDate);
+            const bCompleted = b.completedDates && b.completedDates.includes(currentDate);
+            if (!aCompleted && bCompleted) return -1;
+            if (aCompleted && !bCompleted) return 1;
+
+            if (a.startTime && b.startTime) return a.startTime.localeCompare(b.startTime);
+            if (a.startTime) return -1;
+            if (b.startTime) return 1;
+            return 0;
+        });
+    }
+
     // --- Создание элемента задачи ---
-    function createTaskElement(task, currentDate, onUpdate) {
+    function createTaskElement(task, currentDate, onUpdate, isGlobal) {
         const li = document.createElement('li');
         let isCompleted = false;
         if (task.repeatType === 'none') {
@@ -253,15 +290,46 @@ if ('serviceWorker' in navigator) {
         timeWrapper.appendChild(endInput);
         timeWrapper.appendChild(repeatInfo);
 
-        // Кнопки действий
+        // Кнопки действий (звёздочка, карандаш, крестик)
         const actionsContainer = document.createElement('div');
         actionsContainer.className = 'task-actions';
+
+        const pinBtn = document.createElement('button');
+        pinBtn.className = 'pin-btn';
+        const isPinned = task.pinnedDates && (task.pinnedDates.includes(currentDate) || task.pinnedDates.includes('all'));
+        pinBtn.textContent = isPinned ? '★' : '☆';
+        pinBtn.setAttribute('aria-label', 'Закрепить задачу');
+        pinBtn.title = isPinned ? 'Открепить' : 'Закрепить';
+        pinBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (!task.pinnedDates) task.pinnedDates = [];
+
+            if (isGlobal) {
+                const idx = task.pinnedDates.indexOf('all');
+                if (idx !== -1) {
+                    task.pinnedDates.splice(idx, 1);
+                } else {
+                    task.pinnedDates.push('all');
+                }
+            } else {
+                const idx = task.pinnedDates.indexOf(currentDate);
+                if (idx !== -1) {
+                    task.pinnedDates.splice(idx, 1);
+                } else {
+                    task.pinnedDates.push(currentDate);
+                }
+            }
+            saveData();
+            if (onUpdate) onUpdate();
+        });
+        actionsContainer.appendChild(pinBtn);
 
         const editBtn = document.createElement('button');
         editBtn.className = 'edit-btn';
         editBtn.innerHTML = '✎';
         editBtn.setAttribute('aria-label', 'Редактировать задачу');
         editBtn.title = 'Редактировать';
+        actionsContainer.appendChild(editBtn);
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-btn';
@@ -273,8 +341,6 @@ if ('serviceWorker' in navigator) {
             saveData();
             if (onUpdate) onUpdate();
         });
-
-        actionsContainer.appendChild(editBtn);
         actionsContainer.appendChild(deleteBtn);
 
         // Текст задачи
@@ -474,6 +540,7 @@ if ('serviceWorker' in navigator) {
             e.stopPropagation();
         });
 
+        // Сборка
         li.appendChild(label);
         li.appendChild(timeWrapper);
         li.appendChild(actionsContainer);
@@ -537,6 +604,178 @@ if ('serviceWorker' in navigator) {
         return `Задачи на ${dateStr}`;
     }
 
+    // --- Поиск текущей и следующей задачи (с учётом завтра) ---
+    function findCurrentAndNextTasks(date) {
+        const tasksForDate = getTasksForDate(date);
+        const now = new Date();
+        const currentTime = now.getHours() * 60 + now.getMinutes();
+
+        // Отбираем задачи с startTime
+        const withTime = tasksForDate.filter(t => t.startTime);
+        if (withTime.length === 0) {
+            // Если на сегодня нет задач с временем, ищем на завтра
+            const tomorrow = getTomorrow();
+            const tasksTomorrow = getTasksForDate(tomorrow);
+            const withTimeTomorrow = tasksTomorrow.filter(t => t.startTime);
+            if (withTimeTomorrow.length === 0) return { current: null, next: null };
+            // Сортируем завтрашние задачи по времени
+            const withMinTomorrow = withTimeTomorrow.map(t => {
+                const parts = t.startTime.split(':').map(Number);
+                const startMinutes = parts[0] * 60 + parts[1];
+                let endMinutes = null;
+                if (t.endTime) {
+                    const endParts = t.endTime.split(':').map(Number);
+                    endMinutes = endParts[0] * 60 + endParts[1];
+                }
+                return { task: t, startMinutes, endMinutes };
+            });
+            withMinTomorrow.sort((a, b) => a.startMinutes - b.startMinutes);
+            // Берём самую раннюю как следующую
+            const nextTask = withMinTomorrow[0].task;
+            return { current: null, next: nextTask };
+        }
+
+        // Преобразуем в минуты
+        const withMinutes = withTime.map(t => {
+            const parts = t.startTime.split(':').map(Number);
+            const startMinutes = parts[0] * 60 + parts[1];
+            let endMinutes = null;
+            if (t.endTime) {
+                const endParts = t.endTime.split(':').map(Number);
+                endMinutes = endParts[0] * 60 + endParts[1];
+            }
+            return { task: t, startMinutes, endMinutes };
+        });
+
+        // Сортируем по startMinutes
+        withMinutes.sort((a, b) => a.startMinutes - b.startMinutes);
+
+        // Текущая: start <= current <= end (end обязателен)
+        let current = null;
+        for (let item of withMinutes) {
+            if (item.endMinutes !== null && item.startMinutes <= currentTime && currentTime <= item.endMinutes) {
+                current = item.task;
+                break;
+            }
+        }
+
+        // Следующая: первая с start > currentTime (или если current есть, то после неё)
+        let next = null;
+        for (let item of withMinutes) {
+            if (item.startMinutes > currentTime) {
+                if (current) {
+                    if (item.startMinutes > (current.startTime ? parseTime(current.startTime) : 0)) {
+                        next = item.task;
+                        break;
+                    }
+                } else {
+                    next = item.task;
+                    break;
+                }
+            }
+        }
+
+        // Если следующей нет на сегодня, ищем на завтра
+        if (!next) {
+            const tomorrow = getTomorrow();
+            const tasksTomorrow = getTasksForDate(tomorrow);
+            const withTimeTomorrow = tasksTomorrow.filter(t => t.startTime);
+            if (withTimeTomorrow.length > 0) {
+                const withMinTomorrow = withTimeTomorrow.map(t => {
+                    const parts = t.startTime.split(':').map(Number);
+                    const startMinutes = parts[0] * 60 + parts[1];
+                    return { task: t, startMinutes };
+                });
+                withMinTomorrow.sort((a, b) => a.startMinutes - b.startMinutes);
+                next = withMinTomorrow[0].task;
+            }
+        }
+
+        return { current, next };
+    }
+
+    // Вспомогательная функция для парсинга времени в минуты
+    function parseTime(timeStr) {
+        const parts = timeStr.split(':').map(Number);
+        return parts[0] * 60 + parts[1];
+    }
+
+    // --- Рендеринг блока "Текущая / Следующая задача" ---
+function renderNextTask(date) {
+    const container = document.getElementById('nextTaskContainer');
+    if (!container) return;
+
+    const { current, next } = findCurrentAndNextTasks(date);
+
+    // Если нет ни текущей, ни следующей задачи
+    if (!current && !next) {
+        container.innerHTML = '<div class="next-task-empty">Нет предстоящих задач</div>';
+        return;
+    }
+
+    let html = '';
+
+    // ---- БЛОК ТЕКУЩЕЙ ЗАДАЧИ ----
+    if (current) {
+        // Если текущая задача есть — показываем её детали
+        const grp = current.groupId ? groups.find(g => g.id === current.groupId) : null;
+        const timeDisplay = getTimeDisplay(current);
+        const dateDisplay = formatDateWithDay(date);
+        html += `
+            <div class="next-task-item current">
+                <div class="next-header">Текущая задача</div>
+                <div class="next-details">
+                    <span class="next-time">${dateDisplay} ${timeDisplay}</span>
+                    <span class="next-group">
+                        <span class="group-color-dot" style="background:${current.color || (grp ? grp.color : '#6b7280')};"></span>
+                        ${grp ? grp.name : 'Без группы'}
+                    </span>
+                    <span class="next-text">${current.text}</span>
+                </div>
+            </div>
+        `;
+    } else {
+        // Если текущей задачи нет — показываем заглушку
+        html += `
+            <div class="next-task-item current">
+                <div class="next-header">Текущая задача</div>
+                <div class="next-details" style="font-size: 0.9rem; color: #94a3b8; opacity: 0.8;">
+                    Нет задачи
+                </div>
+            </div>
+        `;
+    }
+
+    // ---- БЛОК СЛЕДУЮЩЕЙ ЗАДАЧИ ----
+    if (next) {
+        const grp = next.groupId ? groups.find(g => g.id === next.groupId) : null;
+        const timeDisplay = getTimeDisplay(next);
+        // Определяем дату для отображения
+        let dateForDisplay = date;
+        const today = getToday();
+        const tomorrow = getTomorrow();
+        if (next.date === today) dateForDisplay = today;
+        else if (next.date === tomorrow) dateForDisplay = tomorrow;
+        else dateForDisplay = next.date;
+        const dateDisplay = formatDateWithDay(dateForDisplay);
+        html += `
+            <div class="next-task-item next">
+                <div class="next-header">Следующая задача</div>
+                <div class="next-details">
+                    <span class="next-time">${dateDisplay} ${timeDisplay}</span>
+                    <span class="next-group">
+                        <span class="group-color-dot" style="background:${next.color || (grp ? grp.color : '#6b7280')};"></span>
+                        ${grp ? grp.name : 'Без группы'}
+                    </span>
+                    <span class="next-text">${next.text}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+}
+
     // --- Рендеринг задач на выбранную дату (левая панель) ---
     function renderTasksForSelectedDate(date) {
         const container = document.getElementById('selectedDateTasksList');
@@ -547,23 +786,22 @@ if ('serviceWorker' in navigator) {
         }
 
         const tasksForDate = getTasksForDate(date);
-        tasksForDate.sort((a, b) => {
-            if (a.startTime && b.startTime) return a.startTime.localeCompare(b.startTime);
-            return 0;
-        });
+        const sorted = sortTasks(tasksForDate, date);
 
         container.innerHTML = '';
-        if (tasksForDate.length === 0) {
+        if (sorted.length === 0) {
             container.innerHTML = '<li class="task-item" style="justify-content:center; background:transparent; border:none; color:#94a3b8; padding:1rem 0;">Нет задач</li>';
         } else {
-            tasksForDate.forEach(task => {
+            sorted.forEach(task => {
                 const li = createTaskElement(task, date, () => {
                     renderTasksForSelectedDate(date);
                     if (currentView !== 'all') renderCalendar();
-                });
+                    renderNextTask(date);
+                }, false);
                 container.appendChild(li);
             });
         }
+        renderNextTask(date);
     }
 
     // --- Рендеринг всех задач (вид "Все задачи") ---
@@ -578,13 +816,13 @@ if ('serviceWorker' in navigator) {
         const wrapper = document.createElement('div');
         wrapper.className = 'all-tasks-view';
         const today = getToday();
-        const sorted = [...allTasks].sort((a, b) => a.date.localeCompare(b.date));
+        const sorted = sortTasks(allTasks, today);
         sorted.forEach(task => {
             const li = createTaskElement(task, today, () => {
                 renderAllTasksView(container);
                 if (currentView !== 'all') renderCalendar();
                 renderTasksForSelectedDate(selectedDate);
-            });
+            }, true);
             wrapper.appendChild(li);
         });
         container.appendChild(wrapper);
@@ -686,7 +924,6 @@ if ('serviceWorker' in navigator) {
             attachDateClickHandlers('.calendar-cell:not(.empty)');
         }
 
-        // После обновления календаря обновляем задачи в левой панели
         renderTasksForSelectedDate(selectedDate);
     }
 
@@ -733,7 +970,7 @@ if ('serviceWorker' in navigator) {
                     renderArchive();
                     if (currentView !== 'all') renderCalendar();
                     renderTasksForSelectedDate(selectedDate);
-                });
+                }, false);
                 archiveList.appendChild(li);
             });
         }
@@ -789,6 +1026,7 @@ if ('serviceWorker' in navigator) {
         const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         dateEl.textContent = dateStr;
         timeEl.textContent = timeStr;
+        renderNextTask(selectedDate);
     }
 
     // --- Переключение режима добавления / просмотра ---
@@ -821,7 +1059,6 @@ if ('serviceWorker' in navigator) {
         const toggleBtn = document.getElementById('toggleAddModeBtn');
         if (toggleBtn) toggleBtn.addEventListener('click', toggleAddMode);
 
-        // Устанавливаем сегодняшнюю дату в поле taskDate
         const taskDateInput = document.getElementById('taskDate');
         if (taskDateInput) taskDateInput.value = getToday();
 
@@ -852,7 +1089,6 @@ if ('serviceWorker' in navigator) {
             });
         }
 
-        // Выбор группы подставляет текст
         const groupSelect = document.getElementById('groupSelect');
         if (groupSelect) {
             groupSelect.addEventListener('change', function() {
@@ -987,6 +1223,7 @@ if ('serviceWorker' in navigator) {
                     repeatDays: repeatDays,
                     repeatEnd: repeatEnd || null,
                     completedDates: [],
+                    pinnedDates: [],
                 };
 
                 tasks.push(newTask);
@@ -998,7 +1235,6 @@ if ('serviceWorker' in navigator) {
                 if (dailyBtn) dailyBtn.classList.remove('active');
                 if (noneBtn) noneBtn.classList.add('active');
 
-                // Если мы в режиме добавления, переключаемся обратно на просмотр
                 const todayContainer = document.getElementById('selectedDateTasksContainer');
                 if (todayContainer && todayContainer.classList.contains('hidden')) {
                     toggleAddMode();
@@ -1014,17 +1250,14 @@ if ('serviceWorker' in navigator) {
             });
         });
 
-        // --- Переключение видов (День, Неделя, Месяц, Свой промежуток, Все задачи) ---
+        // Переключение видов
         document.querySelectorAll('.view-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 const wasActive = this.classList.contains('active');
-                // Снимаем активность со всех
                 document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-                // Активируем текущую
                 this.classList.add('active');
                 currentView = this.dataset.view;
 
-                // Если вкладка была уже активна, сбрасываем на сегодня
                 if (wasActive && currentView !== 'all' && currentView !== 'custom') {
                     selectedDate = getToday();
                 }
