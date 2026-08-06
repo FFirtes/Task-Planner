@@ -1,4 +1,4 @@
-/* style.css — обновлённая версия */
+/* style.css — обновлённая версия с уменьшенным размером и прозрачностью следующей задачи */
 * {
     margin: 0;
     padding: 0;
@@ -62,7 +62,7 @@ h1 {
     background: #1E1F21;
     padding: 0.8rem 1rem;
     border-radius: 16px;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
     border: 1px solid #4B4C4E;
 }
 
@@ -118,6 +118,104 @@ h1 {
     background: #dc2626;
 }
 
+/* ===== БЛОК ТЕКУЩЕЙ / СЛЕДУЮЩЕЙ ЗАДАЧИ ===== */
+.next-task-container {
+    background: #1E1F21;
+    border-radius: 16px;
+    padding: 0.6rem 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid #4B4C4E;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.next-task-container .next-task-empty {
+    color: #94a3b8;
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 0.2rem 0;
+}
+
+.next-task-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.next-task-item .next-header {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ---------- ТЕКУЩАЯ ЗАДАЧА (крупнее, ярче) ---------- */
+.next-task-item.current .next-details {
+    font-size: 1rem;         /* ← размер текста текущей задачи — можно менять */
+    font-weight: 500;
+    padding: 0rem 0.25rem;
+    color: #F2FFEA;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* ---------- СЛЕДУЮЩАЯ ЗАДАЧА (меньше и прозрачнее) ---------- */
+.next-task-item.next .next-details {
+    font-size: 0.65rem;      /* ← уменьшен в 1.5 раза (1rem / 1.5 ≈ 0.67) — можно менять */
+    font-weight: 400;
+    padding: 0rem 0.75rem;
+    color: #E2EEEA;
+    opacity: 0.7;            /* ← прозрачность — можно менять (0.5–0.8) */
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.next-task-item.next .next-header {
+    font-size: 0.65rem;
+    padding: 0.75rem 0rem 0rem 0.5rem;
+    font-weight: 600;
+    color: #94a3b8;
+    opacity: 0.7;  
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Общие стили для деталей (время, группа, текст) */
+.next-task-item .next-details .next-time {
+    font-weight: 600;
+    color: #F2FFFF;
+}
+
+.next-task-item .next-details .next-group {
+    background: #2A2D30;
+    padding: 0.1rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;        /* размер группы остаётся фиксированным */
+    color: #8797AF;
+    border: 1px solid #4B4C4E;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-weight: 400;
+}
+
+.next-task-item .next-details .next-group .group-color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.next-task-item .next-details .next-text {
+    color: #F2FFEA;
+}
+
 /* ===== ЗАДАЧИ НА ВЫБРАННУЮ ДАТУ (левая панель) ===== */
 .today-tasks {
     margin-bottom: 1.5rem;
@@ -128,7 +226,7 @@ h1 {
     font-weight: 600;
     color: #E2EEFF;
     margin-bottom: 0.5rem;
-    border-bottom: 1px solid #4B4C4E; /* изменено с dashed на solid */
+    border-bottom: 1px solid #4B4C4E;
     padding-bottom: 0.5rem;
 }
 
@@ -137,7 +235,7 @@ h1 {
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
-    max-height: 400px;
+    max-height: 500px;
     overflow-y: auto;
 }
 
@@ -778,6 +876,7 @@ h1 {
     gap: 0.3rem;
     flex: 1;
     min-width: 0;
+    order: 2;
 }
 
 .task-item .task-time {
@@ -824,12 +923,35 @@ h1 {
     display: inline;
 }
 
-/* Кнопки действий */
+/* Кнопки действий (карандаш, крестик, звёздочка) */
 .task-item .task-actions {
     display: flex;
     gap: 0.3rem;
     margin-left: auto;
     flex-shrink: 0;
+    order: 3;
+    align-items: center;
+}
+
+.task-item .pin-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    border-radius: 30px;
+    transition: color 0.2s, background 0.2s;
+}
+
+.task-item .pin-btn:hover {
+    background: #3A3627;
+    color: #FFD700;
+}
+
+.task-item .pin-btn.pinned {
+    color: #FFD700;
 }
 
 .task-item .edit-btn {
@@ -877,6 +999,7 @@ h1 {
     transition: background 0.2s;
     margin-top: 0.1rem;
     cursor: pointer;
+    order: 4;
 }
 
 .task-item .task-text:hover {
@@ -1062,6 +1185,7 @@ h1 {
         font-size: 0.65rem;
         max-width: 60px;
     }
+    .task-item .pin-btn,
     .task-item .edit-btn,
     .task-item .delete-btn {
         font-size: 0.9rem;
