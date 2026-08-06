@@ -1,0 +1,29 @@
+{
+  "name": "Task Planner",
+  "short_name": "Planner",
+  "description": "Приложение для планирования ваших задач",
+  "start_url": "https://ffirtes.github.io/Task-Planner/",
+  "display": "standalone",
+  "background_color": "#202326",
+  "theme_color": "#202326",
+  "icons": [
+    {
+      "src": "/Task-Planner/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/Task-Planner/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/Task-Planner/icons/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
