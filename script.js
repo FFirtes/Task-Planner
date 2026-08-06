@@ -1,8 +1,37 @@
-// script.js — вся логика приложения
+// script.js
 (function() {
+    // --- Модели данных ---
     let tasks = [];
+    let groups = [];
 
-    // --- Работа с датами (локальное время) ---
+    // --- Загрузка / сохранение ---
+    function loadData() {
+        const storedTasks = localStorage.getItem('tasks');
+        if (storedTasks) {
+            try { tasks = JSON.parse(storedTasks); }
+            catch (_) { tasks = []; }
+        }
+        const storedGroups = localStorage.getItem('groups');
+        if (storedGroups) {
+            try { groups = JSON.parse(storedGroups); }
+            catch (_) { groups = []; }
+        }
+        if (groups.length === 0) {
+            groups = [
+                { id: 'g1', name: 'Работа', color: '#3b82f6' },
+                { id: 'g2', name: 'Личное', color: '#10b981' },
+                { id: 'g3', name: 'Тренировка', color: '#f59e0b' },
+            ];
+            saveData();
+        }
+    }
+
+    function saveData() {
+        localStorage.setItem('tasks', JSON.stringify(tasks));
+        localStorage.setItem('groups', JSON.stringify(groups));
+    }
+
+    // --- Вспомогательные функции ---
     function parseLocalDate(dateStr) {
         const parts = dateStr.split('-').map(Number);
         return new Date(parts[0], parts[1] - 1, parts[2]);
@@ -22,11 +51,6 @@
     function formatDate(dateStr) {
         const d = parseLocalDate(dateStr);
         return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
-    }
-
-    function formatDateShort(dateStr) {
-        const d = parseLocalDate(dateStr);
-        return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
     }
 
     function getWeekDays(refDate) {
@@ -54,14 +78,6 @@
         return days;
     }
 
-    function getTasksForDate(date) {
-        return tasks.filter(t => t.date === date);
-    }
-
-    function getTasksForRange(startDate, endDate) {
-        return tasks.filter(t => t.date >= startDate && t.date <= endDate);
-    }
-
     function getTimeDisplay(task) {
         if (task.startTime && task.endTime) {
             return `${task.startTime} – ${task.endTime}`;
@@ -72,26 +88,36 @@
         }
     }
 
-    // --- Загрузка / сохранение ---
-    function loadTasks() {
-        const stored = localStorage.getItem('tasks');
-        if (stored) {
-            try { tasks = JSON.parse(stored); }
-            catch (_) { tasks = []; }
+    // --- Проверка видимости задачи на дату (с учётом повторения и даты создания) ---
+    function isTaskVisibleOnDate(task, dateStr) {
+        // Проверка периода окончания
+        if (task.repeatEnd && dateStr > task.repeatEnd) return false;
+
+        if (!task.repeatType || task.repeatType === 'none') {
+            return task.date === dateStr;
         }
-        if (tasks.length === 0) {
-            const today = getToday();
-            tasks = [
-                { id: '1', text: 'Позвонить клиенту', completed: false, date: today, startTime: '10:00', endTime: '10:30', color: '#94a3b8' },
-                { id: '2', text: 'Подготовить отчёт', completed: true, date: today, startTime: '14:00', endTime: '16:00', color: '#94a3b8' },
-                { id: '3', text: 'Запланировать встречу', completed: false, date: today, startTime: '17:00', endTime: '18:00', color: '#94a3b8' },
-            ];
-            saveTasks();
+
+        // Для повторяющихся задач: дата должна быть >= даты создания задачи
+        if (dateStr < task.date) return false;
+
+        const d = parseLocalDate(dateStr);
+        const dayOfWeek = d.getDay();
+
+        if (task.repeatType === 'daily') {
+            return true;
+        } else if (task.repeatType === 'weekly') {
+            if (!task.repeatDays || task.repeatDays.length === 0) return false;
+            return task.repeatDays.includes(dayOfWeek);
         }
+        return false;
     }
 
-    function saveTasks() {
-        localStorage.setItem('tasks', JSON.stringify(tasks));
+    function getTasksForDate(dateStr) {
+        return tasks.filter(task => isTaskVisibleOnDate(task, dateStr));
+    }
+
+    function getAllTasks() {
+        return tasks;
     }
 
     // --- Создание элемента задачи ---
@@ -100,35 +126,51 @@
         li.className = 'task-item' + (task.completed ? ' completed' : '');
         li.dataset.id = task.id;
 
-        // ----- Цветовой кружок (выбор цвета) -----
-        const colorCircle = document.createElement('span');
-        colorCircle.className = 'task-color';
-        colorCircle.style.backgroundColor = task.color || '#94a3b8';
-        colorCircle.title = 'Выбрать цвет задачи';
-        // Скрытый input для выбора цвета
+        // Определяем группу
+        const grp = task.groupId ? groups.find(g => g.id === task.groupId) : null;
+
+        // Создаём метку группы или кружок цвета с единым подходом
+        const label = document.createElement('div');
+        label.className = 'task-group-label';
+
+        // Цветной кружок
+        const colorSpan = document.createElement('span');
+        colorSpan.className = 'group-color';
+        colorSpan.style.backgroundColor = task.color || (grp ? grp.color : '#6b7280');
+        label.appendChild(colorSpan);
+
+        // Название
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'group-name';
+        nameSpan.textContent = grp ? grp.name : 'Без группы';
+        label.appendChild(nameSpan);
+
+        // Скрытый input для выбора цвета (всегда присутствует)
         const colorInput = document.createElement('input');
         colorInput.type = 'color';
         colorInput.className = 'color-picker-input';
-        colorInput.value = task.color || '#94a3b8';
-        colorInput.style.display = 'none';
-        colorCircle.appendChild(colorInput);
-        colorCircle.addEventListener('click', function(e) {
+        colorInput.value = task.color || (grp ? grp.color : '#6b7280');
+        label.appendChild(colorInput);
+
+        // Клик по метке открывает диалог выбора цвета
+        label.addEventListener('click', function(e) {
             e.stopPropagation();
             colorInput.click();
         });
+
+        // При изменении цвета обновляем задачу и кружок
         colorInput.addEventListener('input', function() {
             task.color = this.value;
-            colorCircle.style.backgroundColor = this.value;
-            saveTasks();
-            // не обновляем весь список, только цвет
+            colorSpan.style.backgroundColor = this.value;
+            saveData();
         });
 
-        // ----- Статическое время -----
+        // Время
         const timeSpan = document.createElement('span');
         timeSpan.className = 'task-time';
         timeSpan.textContent = getTimeDisplay(task);
 
-        // ----- Поля редактирования времени -----
+        // Поля редактирования времени
         const startInput = document.createElement('input');
         startInput.type = 'time';
         startInput.className = 'edit-time-input';
@@ -143,27 +185,27 @@
         separator.className = 'edit-time-separator';
         separator.textContent = ' – ';
 
-        // ----- Текст задачи (будет снизу) -----
+        // Текст задачи
         const textSpan = document.createElement('span');
         textSpan.className = 'task-text';
         textSpan.textContent = task.text;
-        // Клик по тексту переключает статус
+
         textSpan.addEventListener('click', function(e) {
+            if (textSpan.classList.contains('editing')) return;
             e.stopPropagation();
             task.completed = !task.completed;
             li.classList.toggle('completed', task.completed);
-            saveTasks();
+            saveData();
             if (onUpdate) onUpdate();
         });
 
-        // ----- Кнопка редактирования (карандаш) -----
+        // Кнопки действий
         const editBtn = document.createElement('button');
         editBtn.className = 'edit-btn';
         editBtn.innerHTML = '✎';
         editBtn.setAttribute('aria-label', 'Редактировать задачу');
         editBtn.title = 'Редактировать';
 
-        // ----- Кнопка удаления (крестик) -----
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-btn';
         deleteBtn.innerHTML = '✕';
@@ -171,11 +213,10 @@
         deleteBtn.title = 'Удалить';
         deleteBtn.addEventListener('click', () => {
             tasks = tasks.filter(t => t.id !== task.id);
-            saveTasks();
+            saveData();
             if (onUpdate) onUpdate();
         });
 
-        // Контейнер для кнопок (карандаш и крестик) — прижат к правому краю
         const actionsContainer = document.createElement('div');
         actionsContainer.className = 'task-actions';
         actionsContainer.appendChild(editBtn);
@@ -195,14 +236,18 @@
             }
             const newStart = startInput.value;
             const newEnd = endInput.value;
+            // Проверка времени: начало не позже конца
             if (newStart && newEnd && newStart > newEnd) {
-                alert('Время начала не может быть позже времени окончания');
+                startInput.setCustomValidity('Время начала не может быть позже времени окончания');
+                startInput.reportValidity();
                 return false;
+            } else {
+                startInput.setCustomValidity('');
             }
             task.text = newText;
             task.startTime = newStart || '';
             task.endTime = newEnd || '';
-            saveTasks();
+            saveData();
             return true;
         }
 
@@ -258,9 +303,10 @@
             timeSpan.style.display = 'inline';
             textSpan.textContent = task.text;
             timeSpan.textContent = getTimeDisplay(task);
+            // Сброс ошибок
+            startInput.setCustomValidity('');
         }
 
-        // --- События для кнопок и полей ---
         editBtn.addEventListener('click', function(e) {
             e.stopPropagation();
             if (isEditing) {
@@ -345,21 +391,64 @@
             e.stopPropagation();
         });
 
-        // ----- Сборка элемента -----
-        li.appendChild(colorCircle);
+        // Сборка
+        li.appendChild(label);
         li.appendChild(timeSpan);
         li.appendChild(startInput);
         li.appendChild(separator);
         li.appendChild(endInput);
-        li.appendChild(actionsContainer); // контейнер с карандашом и крестиком
-        li.appendChild(textSpan);          // текст внизу
+        li.appendChild(actionsContainer);
+        li.appendChild(textSpan);
 
         return li;
     }
 
-    // --- Рендеринг задач для выбранной даты ---
+    // --- Рендеринг групп ---
+    function renderGroups() {
+        const container = document.getElementById('groupsList');
+        container.innerHTML = '';
+        groups.forEach(grp => {
+            const div = document.createElement('div');
+            div.className = 'group-item';
+            const colorSpan = document.createElement('span');
+            colorSpan.className = 'group-color';
+            colorSpan.style.backgroundColor = grp.color;
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'group-name';
+            nameSpan.textContent = grp.name;
+            const delBtn = document.createElement('button');
+            delBtn.className = 'group-delete';
+            delBtn.textContent = '✕';
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                groups = groups.filter(g => g.id !== grp.id);
+                saveData();
+                renderGroups();
+                populateGroupSelect();
+            });
+            div.appendChild(colorSpan);
+            div.appendChild(nameSpan);
+            div.appendChild(delBtn);
+            container.appendChild(div);
+        });
+    }
+
+    // --- Заполнение селекта групп ---
+    function populateGroupSelect() {
+        const select = document.getElementById('groupSelect');
+        select.innerHTML = '<option value="">Без группы</option>';
+        groups.forEach(grp => {
+            const opt = document.createElement('option');
+            opt.value = grp.id;
+            opt.textContent = grp.name;
+            opt.style.color = grp.color;
+            select.appendChild(opt);
+        });
+    }
+
+    // --- Рендеринг задач для даты ---
     function renderTasksForDate(date) {
-        const listContainer = document.getElementById('tasksForDateList');
+        const container = document.getElementById('tasksForDateList');
         const titleEl = document.getElementById('tasksForDateTitle');
         titleEl.textContent = `Задачи на ${formatDate(date)}`;
 
@@ -370,43 +459,38 @@
             return 0;
         });
 
-        listContainer.innerHTML = '';
+        container.innerHTML = '';
         if (tasksForDate.length === 0) {
-            listContainer.innerHTML = '<li class="task-item" style="justify-content:center; background:transparent; border:none; color:#94a3b8; padding:1rem 0;">Нет задач</li>';
+            container.innerHTML = '<li class="task-item" style="justify-content:center; background:transparent; border:none; color:#94a3b8; padding:1rem 0;">Нет задач</li>';
         } else {
             tasksForDate.forEach(task => {
                 const li = createTaskElement(task, () => {
                     renderTasksForDate(date);
-                    const activeTab = document.querySelector('.tab-btn.active');
-                    if (activeTab && activeTab.dataset.tab === 'calendar') {
-                        renderCalendar();
-                    }
+                    if (currentView !== 'all') renderCalendar();
                 });
-                listContainer.appendChild(li);
+                container.appendChild(li);
             });
         }
     }
 
-    // --- Рендеринг списка всех задач ---
+    // --- Рендеринг всех задач ---
     function renderAllTasksView(container) {
         container.innerHTML = '';
-        if (tasks.length === 0) {
+        const allTasks = getAllTasks();
+        if (allTasks.length === 0) {
             container.innerHTML = '<p style="color:#94a3b8; padding:1rem;">Нет задач</p>';
             return;
         }
         const wrapper = document.createElement('div');
         wrapper.className = 'all-tasks-view';
-        const sorted = [...tasks].sort((a, b) => {
+        const sorted = [...allTasks].sort((a, b) => {
             if (a.completed !== b.completed) return a.completed ? 1 : -1;
             return a.date.localeCompare(b.date);
         });
         sorted.forEach(task => {
             const li = createTaskElement(task, () => {
                 renderAllTasksView(container);
-                const activeTab = document.querySelector('.tab-btn.active');
-                if (activeTab && activeTab.dataset.tab === 'calendar') {
-                    renderCalendar();
-                }
+                if (currentView !== 'all') renderCalendar();
             });
             wrapper.appendChild(li);
         });
@@ -424,14 +508,17 @@
         const titleEl = document.getElementById('calendarTitle');
         const controls = document.getElementById('calendarControls');
         const customContainer = document.getElementById('customRangeContainer');
+        const tasksContainer = document.getElementById('tasksForDateContainer');
 
         if (currentView === 'all') {
             controls.style.display = 'none';
             customContainer.style.display = 'none';
+            tasksContainer.classList.add('hidden');
             renderAllTasksView(container);
             return;
         } else {
             controls.style.display = 'flex';
+            tasksContainer.classList.remove('hidden');
         }
 
         let daysArray = [];
@@ -548,10 +635,7 @@
             completedTasks.forEach(task => {
                 const li = createTaskElement(task, () => {
                     renderArchive();
-                    const activeTab = document.querySelector('.tab-btn.active');
-                    if (activeTab && activeTab.dataset.tab === 'calendar') {
-                        renderCalendar();
-                    }
+                    if (currentView !== 'all') renderCalendar();
                 });
                 archiveList.appendChild(li);
             });
@@ -567,7 +651,7 @@
         const todayTasks = getTasksForDate(today);
         const todayCompleted = todayTasks.filter(t => t.completed).length;
         const weekDays = getWeekDays(today);
-        const weekTasks = tasks.filter(t => weekDays.includes(t.date));
+        const weekTasks = tasks.filter(t => weekDays.some(d => isTaskVisibleOnDate(t, d)));
         const weekCompleted = weekTasks.filter(t => t.completed).length;
 
         let html = `
@@ -583,7 +667,6 @@
     }
 
     function renderAll() {
-        renderTasksForDate(selectedDate);
         const activeTab = document.querySelector('.tab-btn.active');
         if (activeTab) {
             const tabId = activeTab.dataset.tab;
@@ -591,23 +674,88 @@
             else if (tabId === 'archive') renderArchive();
             else if (tabId === 'stats') renderStats();
         }
+        renderGroups();
+        populateGroupSelect();
     }
 
     // --- Инициализация ---
     function init() {
-        loadTasks();
+        loadData();
+        renderGroups();
+        populateGroupSelect();
+
+        // Устанавливаем дату по умолчанию
         document.getElementById('taskDate').value = getToday();
 
-        const startTimeInput = document.getElementById('startTime');
-        const endTimeInput = document.getElementById('endTime');
-
-        startTimeInput.addEventListener('input', function() {
-            this.setCustomValidity('');
+        // --- Добавление группы ---
+        document.getElementById('addGroupBtn').addEventListener('click', function() {
+            const nameInput = document.getElementById('groupNameInput');
+            const colorInput = document.getElementById('groupColorInput');
+            const name = nameInput.value.trim();
+            if (!name) {
+                nameInput.setCustomValidity('Введите название группы');
+                nameInput.reportValidity();
+                return;
+            }
+            nameInput.setCustomValidity('');
+            const newGroup = {
+                id: 'g' + Date.now(),
+                name: name,
+                color: colorInput.value,
+            };
+            groups.push(newGroup);
+            saveData();
+            renderGroups();
+            populateGroupSelect();
+            nameInput.value = '';
         });
-        endTimeInput.addEventListener('input', function() {
-            document.getElementById('startTime').setCustomValidity('');
+
+        // --- Выбор группы подставляет текст ---
+        document.getElementById('groupSelect').addEventListener('change', function() {
+            const selectedId = this.value;
+            if (selectedId) {
+                const grp = groups.find(g => g.id === selectedId);
+                if (grp) {
+                    document.getElementById('taskInput').value = grp.name;
+                }
+            } else {
+                document.getElementById('taskInput').value = '';
+            }
         });
 
+        // --- Повторение: кнопки (множественный выбор) ---
+        const repeatButtons = document.querySelectorAll('.repeat-btn');
+        const dayButtons = document.querySelectorAll('.day-btn');
+        const noneBtn = document.querySelector('.repeat-btn[data-value="none"]');
+        const dailyBtn = document.querySelector('.repeat-btn[data-value="daily"]');
+
+        dayButtons.forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                this.classList.toggle('active');
+                const anyDayActive = Array.from(dayButtons).some(b => b.classList.contains('active'));
+                if (anyDayActive) {
+                    noneBtn.classList.remove('active');
+                    dailyBtn.classList.remove('active');
+                }
+            });
+        });
+
+        noneBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            dayButtons.forEach(b => b.classList.remove('active'));
+            dailyBtn.classList.remove('active');
+            this.classList.add('active');
+        });
+
+        dailyBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            dayButtons.forEach(b => b.classList.remove('active'));
+            noneBtn.classList.remove('active');
+            this.classList.add('active');
+        });
+
+        // --- Добавление задачи ---
         document.getElementById('taskForm').addEventListener('submit', function(e) {
             e.preventDefault();
 
@@ -621,79 +769,89 @@
                 input.setCustomValidity('');
             }
 
-            const startVal = startTimeInput.value;
-            const endVal = endTimeInput.value;
-            if (startVal && endVal && startVal > endVal) {
-                startTimeInput.setCustomValidity('Время начала не может быть позже времени окончания');
-                startTimeInput.reportValidity();
+            const date = document.getElementById('taskDate').value || getToday();
+            const startTime = document.getElementById('startTime').value || '';
+            const endTime = document.getElementById('endTime').value || '';
+            const repeatEnd = document.getElementById('repeatEnd').value || '';
+
+            // Проверка: время начала не позже конца
+            if (startTime && endTime && startTime > endTime) {
+                document.getElementById('startTime').setCustomValidity('Время начала не может быть позже времени окончания');
+                document.getElementById('startTime').reportValidity();
                 return;
             } else {
-                startTimeInput.setCustomValidity('');
+                document.getElementById('startTime').setCustomValidity('');
             }
 
-            const date = document.getElementById('taskDate').value || getToday();
+            // Проверка: дата задачи не позже repeatEnd
+            if (repeatEnd && date > repeatEnd) {
+                document.getElementById('repeatEnd').setCustomValidity('Дата задачи не может быть позже даты окончания повторения');
+                document.getElementById('repeatEnd').reportValidity();
+                return;
+            } else {
+                document.getElementById('repeatEnd').setCustomValidity('');
+            }
+
+            // Определяем тип повторения
+            let repeatType = 'none';
+            let repeatDays = [];
+
+            if (noneBtn.classList.contains('active')) {
+                repeatType = 'none';
+            } else if (dailyBtn.classList.contains('active')) {
+                repeatType = 'daily';
+            } else {
+                const activeDays = Array.from(dayButtons).filter(b => b.classList.contains('active'));
+                if (activeDays.length > 0) {
+                    repeatType = 'weekly';
+                    repeatDays = activeDays.map(b => parseInt(b.dataset.value));
+                } else {
+                    repeatType = 'none';
+                }
+            }
+
+            // Группа
+            const groupId = document.getElementById('groupSelect').value || null;
+            let color = '#94a3b8';
+            if (groupId) {
+                const grp = groups.find(g => g.id === groupId);
+                if (grp) color = grp.color;
+            }
+
             const newTask = {
-                id: Date.now() + Math.random().toString(36).slice(2, 6),
+                id: 'task' + Date.now(),
                 text: text,
                 completed: false,
                 date: date,
-                startTime: startVal || '',
-                endTime: endVal || '',
-                color: '#94a3b8'
+                startTime: startTime,
+                endTime: endTime,
+                color: color,
+                groupId: groupId,
+                repeatType: repeatType,
+                repeatDays: repeatDays,
+                repeatEnd: repeatEnd || null,
             };
+
             tasks.push(newTask);
-            saveTasks();
+            saveData();
             input.value = '';
+            // Сброс формы
+            document.getElementById('repeatEnd').value = '';
+            document.getElementById('groupSelect').value = '';
+            dayButtons.forEach(b => b.classList.remove('active'));
+            dailyBtn.classList.remove('active');
+            noneBtn.classList.add('active');
             renderAll();
         });
 
-        const customStartInput = document.getElementById('customStart');
-        const customEndInput = document.getElementById('customEnd');
-
-        customStartInput.addEventListener('input', function() {
-            customEndInput.setCustomValidity('');
-        });
-        customEndInput.addEventListener('input', function() {
-            this.setCustomValidity('');
-        });
-
-        document.getElementById('applyCustomRange').addEventListener('click', function() {
-            customStartInput.setCustomValidity('');
-            customEndInput.setCustomValidity('');
-
-            const start = customStartInput.value;
-            const end = customEndInput.value;
-
-            if (!start || !end) {
-                customEndInput.setCustomValidity('Выберите обе даты');
-                customEndInput.reportValidity();
-                return;
-            }
-            if (start > end) {
-                customEndInput.setCustomValidity('Дата начала не может быть позже даты конца');
-                customEndInput.reportValidity();
-                return;
-            }
-
-            const diffTime = Math.abs(parseLocalDate(end) - parseLocalDate(start));
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            if (diffDays > 30) {
-                customEndInput.setCustomValidity('Диапазон не должен превышать 31 день');
-                customEndInput.reportValidity();
-                return;
-            }
-
-            customStart = start;
-            customEnd = end;
-            renderCalendar();
-        });
-
+        // --- Переключение вкладок ---
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 switchTab(this.dataset.tab);
             });
         });
 
+        // --- Переключение видов ---
         document.querySelectorAll('.view-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
@@ -702,8 +860,8 @@
                 const customContainer = document.getElementById('customRangeContainer');
                 if (currentView === 'custom') {
                     customContainer.style.display = 'flex';
-                    customStartInput.value = customStart;
-                    customEndInput.value = customEnd;
+                    document.getElementById('customStart').value = customStart;
+                    document.getElementById('customEnd').value = customEnd;
                 } else {
                     customContainer.style.display = 'none';
                 }
@@ -713,6 +871,7 @@
             });
         });
 
+        // --- Навигация ---
         document.getElementById('calendarPrev').addEventListener('click', function() {
             if (currentView === 'all') return;
             const d = parseLocalDate(selectedDate);
@@ -735,10 +894,32 @@
             renderAll();
         });
 
+        // --- Custom range ---
+        document.getElementById('applyCustomRange').addEventListener('click', function() {
+            const start = document.getElementById('customStart').value;
+            const end = document.getElementById('customEnd').value;
+            if (!start || !end) {
+                document.getElementById('customEnd').setCustomValidity('Выберите обе даты');
+                document.getElementById('customEnd').reportValidity();
+                return;
+            }
+            if (start > end) {
+                document.getElementById('customEnd').setCustomValidity('Дата начала не может быть позже даты конца');
+                document.getElementById('customEnd').reportValidity();
+                return;
+            }
+            document.getElementById('customEnd').setCustomValidity('');
+            customStart = start;
+            customEnd = end;
+            renderCalendar();
+        });
+
+        // --- Старт ---
         switchTab('calendar');
         currentView = 'day';
         document.querySelector('.view-btn[data-view="day"]').classList.add('active');
         document.getElementById('customRangeContainer').style.display = 'none';
+        noneBtn.classList.add('active');
         renderAll();
     }
 
