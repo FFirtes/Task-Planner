@@ -1,4 +1,4 @@
-// script.js
+// script.js — обновлённая версия
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/Task-Planner/sw.js')
     .then(() => console.log('Service Worker зарегистрирован!'))
@@ -30,7 +30,6 @@ if ('serviceWorker' in navigator) {
             saveData();
         }
 
-        // Миграция: преобразуем старые задачи с полем completed в completedDates
         tasks.forEach(task => {
             if (task.completed !== undefined && task.completedDates === undefined) {
                 task.completedDates = task.completed ? [task.date] : [];
@@ -63,6 +62,12 @@ if ('serviceWorker' in navigator) {
 
     function getToday() {
         return formatLocalDate(new Date());
+    }
+
+    function getTomorrow() {
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        return formatLocalDate(d);
     }
 
     function formatDate(dateStr) {
@@ -169,7 +174,6 @@ if ('serviceWorker' in navigator) {
     // --- Создание элемента задачи ---
     function createTaskElement(task, currentDate, onUpdate) {
         const li = document.createElement('li');
-        // Определяем выполнена ли задача на текущую дату
         let isCompleted = false;
         if (task.repeatType === 'none') {
             isCompleted = task.completedDates && task.completedDates.includes(task.date);
@@ -212,16 +216,14 @@ if ('serviceWorker' in navigator) {
             saveData();
         });
 
-        // ---- Время и повторение в одной строке ----
+        // Время и повторение
         const timeWrapper = document.createElement('div');
         timeWrapper.className = 'task-time-wrapper';
 
-        // Статическое время
         const timeSpan = document.createElement('span');
         timeSpan.className = 'task-time';
         timeSpan.textContent = getTimeDisplay(task);
 
-        // Поля редактирования времени
         const startInput = document.createElement('input');
         startInput.type = 'time';
         startInput.className = 'edit-time-input';
@@ -236,7 +238,6 @@ if ('serviceWorker' in navigator) {
         separator.className = 'edit-time-separator';
         separator.textContent = ' – ';
 
-        // Информация о повторении
         const repeatInfo = document.createElement('span');
         repeatInfo.className = 'task-repeat-info';
         const repeatText = getRepeatDisplay(task);
@@ -252,7 +253,7 @@ if ('serviceWorker' in navigator) {
         timeWrapper.appendChild(endInput);
         timeWrapper.appendChild(repeatInfo);
 
-        // ---- Кнопки действий (справа) ----
+        // Кнопки действий
         const actionsContainer = document.createElement('div');
         actionsContainer.className = 'task-actions';
 
@@ -276,17 +277,15 @@ if ('serviceWorker' in navigator) {
         actionsContainer.appendChild(editBtn);
         actionsContainer.appendChild(deleteBtn);
 
-        // ---- Текст задачи (на новой строке) ----
+        // Текст задачи
         const textSpan = document.createElement('span');
         textSpan.className = 'task-text';
         textSpan.textContent = task.text;
 
-        // Клик по тексту переключает выполнение на текущую дату
         textSpan.addEventListener('click', function(e) {
             if (textSpan.classList.contains('editing')) return;
             e.stopPropagation();
 
-            // Определяем дату для переключения
             let toggleDate;
             if (task.repeatType === 'none') {
                 toggleDate = task.date;
@@ -302,14 +301,13 @@ if ('serviceWorker' in navigator) {
                 task.completedDates.push(toggleDate);
             }
 
-            // Обновляем класс completed
             const newIsCompleted = task.completedDates.includes(toggleDate);
             li.classList.toggle('completed', newIsCompleted);
             saveData();
             if (onUpdate) onUpdate();
         });
 
-        // --- Логика редактирования ---
+        // Редактирование
         let isEditing = false;
         let originalText = task.text;
         let originalStart = task.startTime || '';
@@ -476,7 +474,6 @@ if ('serviceWorker' in navigator) {
             e.stopPropagation();
         });
 
-        // Сборка
         li.appendChild(label);
         li.appendChild(timeWrapper);
         li.appendChild(actionsContainer);
@@ -488,6 +485,7 @@ if ('serviceWorker' in navigator) {
     // --- Рендеринг групп ---
     function renderGroups() {
         const container = document.getElementById('groupsList');
+        if (!container) return;
         container.innerHTML = '';
         groups.forEach(grp => {
             const div = document.createElement('div');
@@ -518,6 +516,7 @@ if ('serviceWorker' in navigator) {
     // --- Заполнение селекта групп ---
     function populateGroupSelect() {
         const select = document.getElementById('groupSelect');
+        if (!select) return;
         select.innerHTML = '<option value="">Без группы</option>';
         groups.forEach(grp => {
             const opt = document.createElement('option');
@@ -528,11 +527,24 @@ if ('serviceWorker' in navigator) {
         });
     }
 
-    // --- Рендеринг задач для даты ---
-    function renderTasksForDate(date) {
-        const container = document.getElementById('tasksForDateList');
-        const titleEl = document.getElementById('tasksForDateTitle');
-        titleEl.textContent = `Задачи на ${formatDate(date)}`;
+    // --- Формирование заголовка для задач на дату ---
+    function getTasksTitle(date) {
+        const today = getToday();
+        const tomorrow = getTomorrow();
+        const dateStr = formatDate(date);
+        if (date === today) return `Задачи на сегодня, ${dateStr}`;
+        if (date === tomorrow) return `Задачи на завтра, ${dateStr}`;
+        return `Задачи на ${dateStr}`;
+    }
+
+    // --- Рендеринг задач на выбранную дату (левая панель) ---
+    function renderTasksForSelectedDate(date) {
+        const container = document.getElementById('selectedDateTasksList');
+        if (!container) return;
+        const titleEl = document.getElementById('selectedDateTitle');
+        if (titleEl) {
+            titleEl.textContent = getTasksTitle(date);
+        }
 
         const tasksForDate = getTasksForDate(date);
         tasksForDate.sort((a, b) => {
@@ -546,7 +558,7 @@ if ('serviceWorker' in navigator) {
         } else {
             tasksForDate.forEach(task => {
                 const li = createTaskElement(task, date, () => {
-                    renderTasksForDate(date);
+                    renderTasksForSelectedDate(date);
                     if (currentView !== 'all') renderCalendar();
                 });
                 container.appendChild(li);
@@ -554,8 +566,9 @@ if ('serviceWorker' in navigator) {
         }
     }
 
-    // --- Рендеринг всех задач ---
+    // --- Рендеринг всех задач (вид "Все задачи") ---
     function renderAllTasksView(container) {
+        if (!container) return;
         container.innerHTML = '';
         const allTasks = getAllTasks();
         if (allTasks.length === 0) {
@@ -570,6 +583,7 @@ if ('serviceWorker' in navigator) {
             const li = createTaskElement(task, today, () => {
                 renderAllTasksView(container);
                 if (currentView !== 'all') renderCalendar();
+                renderTasksForSelectedDate(selectedDate);
             });
             wrapper.appendChild(li);
         });
@@ -584,40 +598,38 @@ if ('serviceWorker' in navigator) {
 
     function renderCalendar() {
         const container = document.getElementById('calendarView');
+        if (!container) return;
         const titleEl = document.getElementById('calendarTitle');
         const controls = document.getElementById('calendarControls');
         const customContainer = document.getElementById('customRangeContainer');
-        const tasksContainer = document.getElementById('tasksForDateContainer');
 
         if (currentView === 'all') {
-            controls.style.display = 'none';
-            customContainer.style.display = 'none';
-            tasksContainer.classList.add('hidden');
+            if (controls) controls.style.display = 'none';
+            if (customContainer) customContainer.style.display = 'none';
             renderAllTasksView(container);
             return;
         } else {
-            controls.style.display = 'flex';
-            tasksContainer.classList.remove('hidden');
+            if (controls) controls.style.display = 'flex';
         }
 
         let daysArray = [];
 
         if (currentView === 'day') {
             daysArray = [selectedDate];
-            titleEl.textContent = formatDate(selectedDate);
+            if (titleEl) titleEl.textContent = formatDate(selectedDate);
         } else if (currentView === 'week') {
             const week = getWeekDays(selectedDate);
             daysArray = week;
-            titleEl.textContent = `Неделя ${formatDate(week[0])} – ${formatDate(week[6])}`;
+            if (titleEl) titleEl.textContent = `Неделя ${formatDate(week[0])} – ${formatDate(week[6])}`;
         } else if (currentView === 'month') {
             const d = parseLocalDate(selectedDate);
             const year = d.getFullYear();
             const month = d.getMonth() + 1;
             daysArray = getMonthDays(year, month);
-            titleEl.textContent = `${d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}`;
+            if (titleEl) titleEl.textContent = `${d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}`;
         } else if (currentView === 'custom') {
-            const start = document.getElementById('customStart').value;
-            const end = document.getElementById('customEnd').value;
+            const start = document.getElementById('customStart')?.value;
+            const end = document.getElementById('customEnd')?.value;
             if (start && end) {
                 customStart = start;
                 customEnd = end;
@@ -629,7 +641,7 @@ if ('serviceWorker' in navigator) {
                     daysArray.push(formatLocalDate(cur));
                     cur.setDate(cur.getDate() + 1);
                 }
-                titleEl.textContent = `${formatDate(start)} – ${formatDate(end)}`;
+                if (titleEl) titleEl.textContent = `${formatDate(start)} – ${formatDate(end)}`;
             } else {
                 container.innerHTML = '<p style="color:#94a3b8; padding:1rem;">Выберите даты начала и конца</p>';
                 return;
@@ -674,7 +686,8 @@ if ('serviceWorker' in navigator) {
             attachDateClickHandlers('.calendar-cell:not(.empty)');
         }
 
-        renderTasksForDate(selectedDate);
+        // После обновления календаря обновляем задачи в левой панели
+        renderTasksForSelectedDate(selectedDate);
     }
 
     function attachDateClickHandlers(selector) {
@@ -695,8 +708,10 @@ if ('serviceWorker' in navigator) {
     function switchTab(tabId) {
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById('tab-' + tabId).classList.add('active');
-        document.querySelector(`.tab-btn[data-tab="${tabId}"]`).classList.add('active');
+        const pane = document.getElementById('tab-' + tabId);
+        if (pane) pane.classList.add('active');
+        const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+        if (btn) btn.classList.add('active');
 
         if (tabId === 'archive') renderArchive();
         if (tabId === 'stats') renderStats();
@@ -705,6 +720,7 @@ if ('serviceWorker' in navigator) {
 
     function renderArchive() {
         const archiveList = document.getElementById('archiveList');
+        if (!archiveList) return;
         const completedTasks = tasks.filter(t => t.completedDates && t.completedDates.length > 0);
         archiveList.innerHTML = '';
         if (completedTasks.length === 0) {
@@ -716,6 +732,7 @@ if ('serviceWorker' in navigator) {
                 const li = createTaskElement(task, today, () => {
                     renderArchive();
                     if (currentView !== 'all') renderCalendar();
+                    renderTasksForSelectedDate(selectedDate);
                 });
                 archiveList.appendChild(li);
             });
@@ -724,6 +741,7 @@ if ('serviceWorker' in navigator) {
 
     function renderStats() {
         const container = document.getElementById('statsDetail');
+        if (!container) return;
         const total = tasks.length;
         const completed = tasks.filter(t => t.completedDates && t.completedDates.length > 0).length;
         const incomplete = total - completed;
@@ -746,7 +764,9 @@ if ('serviceWorker' in navigator) {
         container.innerHTML = html;
     }
 
+    // --- Основная функция обновления ---
     function renderAll() {
+        renderTasksForSelectedDate(selectedDate);
         const activeTab = document.querySelector('.tab-btn.active');
         if (activeTab) {
             const tabId = activeTab.dataset.tab;
@@ -756,6 +776,40 @@ if ('serviceWorker' in navigator) {
         }
         renderGroups();
         populateGroupSelect();
+        updateDateTime();
+    }
+
+    // --- Обновление даты и времени (каждую секунду) ---
+    function updateDateTime() {
+        const dateEl = document.getElementById('todayDate');
+        const timeEl = document.getElementById('currentTime');
+        if (!dateEl || !timeEl) return;
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+        const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        dateEl.textContent = dateStr;
+        timeEl.textContent = timeStr;
+    }
+
+    // --- Переключение режима добавления / просмотра ---
+    function toggleAddMode() {
+        const todayContainer = document.getElementById('selectedDateTasksContainer');
+        const addContainer = document.getElementById('addTaskContainer');
+        const toggleBtn = document.getElementById('toggleAddModeBtn');
+        if (!todayContainer || !addContainer || !toggleBtn) return;
+
+        if (todayContainer.classList.contains('hidden')) {
+            todayContainer.classList.remove('hidden');
+            addContainer.classList.add('hidden');
+            toggleBtn.classList.remove('active');
+            toggleBtn.textContent = '+';
+            renderTasksForSelectedDate(selectedDate);
+        } else {
+            todayContainer.classList.add('hidden');
+            addContainer.classList.remove('hidden');
+            toggleBtn.classList.add('active');
+            toggleBtn.textContent = '✕';
+        }
     }
 
     // --- Инициализация ---
@@ -764,46 +818,59 @@ if ('serviceWorker' in navigator) {
         renderGroups();
         populateGroupSelect();
 
-        document.getElementById('taskDate').value = getToday();
+        const toggleBtn = document.getElementById('toggleAddModeBtn');
+        if (toggleBtn) toggleBtn.addEventListener('click', toggleAddMode);
+
+        // Устанавливаем сегодняшнюю дату в поле taskDate
+        const taskDateInput = document.getElementById('taskDate');
+        if (taskDateInput) taskDateInput.value = getToday();
 
         // Добавление группы
-        document.getElementById('addGroupBtn').addEventListener('click', function() {
-            const nameInput = document.getElementById('groupNameInput');
-            const colorInput = document.getElementById('groupColorInput');
-            const name = nameInput.value.trim();
-            if (!name) {
-                nameInput.setCustomValidity('Введите название группы');
-                nameInput.reportValidity();
-                return;
-            }
-            nameInput.setCustomValidity('');
-            const newGroup = {
-                id: 'g' + Date.now(),
-                name: name,
-                color: colorInput.value,
-            };
-            groups.push(newGroup);
-            saveData();
-            renderGroups();
-            populateGroupSelect();
-            nameInput.value = '';
-        });
+        const addGroupBtn = document.getElementById('addGroupBtn');
+        if (addGroupBtn) {
+            addGroupBtn.addEventListener('click', function() {
+                const nameInput = document.getElementById('groupNameInput');
+                const colorInput = document.getElementById('groupColorInput');
+                if (!nameInput || !colorInput) return;
+                const name = nameInput.value.trim();
+                if (!name) {
+                    nameInput.setCustomValidity('Введите название группы');
+                    nameInput.reportValidity();
+                    return;
+                }
+                nameInput.setCustomValidity('');
+                const newGroup = {
+                    id: 'g' + Date.now(),
+                    name: name,
+                    color: colorInput.value,
+                };
+                groups.push(newGroup);
+                saveData();
+                renderGroups();
+                populateGroupSelect();
+                nameInput.value = '';
+            });
+        }
 
         // Выбор группы подставляет текст
-        document.getElementById('groupSelect').addEventListener('change', function() {
-            const selectedId = this.value;
-            if (selectedId) {
-                const grp = groups.find(g => g.id === selectedId);
-                if (grp) {
-                    document.getElementById('taskInput').value = grp.name;
+        const groupSelect = document.getElementById('groupSelect');
+        if (groupSelect) {
+            groupSelect.addEventListener('change', function() {
+                const selectedId = this.value;
+                const taskInput = document.getElementById('taskInput');
+                if (!taskInput) return;
+                if (selectedId) {
+                    const grp = groups.find(g => g.id === selectedId);
+                    if (grp) {
+                        taskInput.value = grp.name;
+                    }
+                } else {
+                    taskInput.value = '';
                 }
-            } else {
-                document.getElementById('taskInput').value = '';
-            }
-        });
+            });
+        }
 
-        // Повторение: кнопки (множественный выбор)
-        const repeatButtons = document.querySelectorAll('.repeat-btn');
+        // Повторение: кнопки
         const dayButtons = document.querySelectorAll('.day-btn');
         const noneBtn = document.querySelector('.repeat-btn[data-value="none"]');
         const dailyBtn = document.querySelector('.repeat-btn[data-value="daily"]');
@@ -814,109 +881,131 @@ if ('serviceWorker' in navigator) {
                 this.classList.toggle('active');
                 const anyDayActive = Array.from(dayButtons).some(b => b.classList.contains('active'));
                 if (anyDayActive) {
-                    noneBtn.classList.remove('active');
-                    dailyBtn.classList.remove('active');
+                    if (noneBtn) noneBtn.classList.remove('active');
+                    if (dailyBtn) dailyBtn.classList.remove('active');
                 }
             });
         });
 
-        noneBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            dayButtons.forEach(b => b.classList.remove('active'));
-            dailyBtn.classList.remove('active');
-            this.classList.add('active');
-        });
+        if (noneBtn) {
+            noneBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                dayButtons.forEach(b => b.classList.remove('active'));
+                if (dailyBtn) dailyBtn.classList.remove('active');
+                this.classList.add('active');
+            });
+        }
 
-        dailyBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            dayButtons.forEach(b => b.classList.remove('active'));
-            noneBtn.classList.remove('active');
-            this.classList.add('active');
-        });
+        if (dailyBtn) {
+            dailyBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                dayButtons.forEach(b => b.classList.remove('active'));
+                if (noneBtn) noneBtn.classList.remove('active');
+                this.classList.add('active');
+            });
+        }
 
         // Добавление задачи
-        document.getElementById('taskForm').addEventListener('submit', function(e) {
-            e.preventDefault();
+        const taskForm = document.getElementById('taskForm');
+        if (taskForm) {
+            taskForm.addEventListener('submit', function(e) {
+                e.preventDefault();
 
-            const input = document.getElementById('taskInput');
-            const text = input.value.trim();
-            if (!text) {
-                input.setCustomValidity('Введите текст задачи');
-                input.reportValidity();
-                return;
-            } else {
-                input.setCustomValidity('');
-            }
-
-            const date = document.getElementById('taskDate').value || getToday();
-            const startTime = document.getElementById('startTime').value || '';
-            const endTime = document.getElementById('endTime').value || '';
-            const repeatEnd = document.getElementById('repeatEnd').value || '';
-
-            if (startTime && endTime && startTime > endTime) {
-                document.getElementById('startTime').setCustomValidity('Время начала не может быть позже времени окончания');
-                document.getElementById('startTime').reportValidity();
-                return;
-            } else {
-                document.getElementById('startTime').setCustomValidity('');
-            }
-
-            if (repeatEnd && date > repeatEnd) {
-                document.getElementById('repeatEnd').setCustomValidity('Дата задачи не может быть позже даты окончания повторения');
-                document.getElementById('repeatEnd').reportValidity();
-                return;
-            } else {
-                document.getElementById('repeatEnd').setCustomValidity('');
-            }
-
-            let repeatType = 'none';
-            let repeatDays = [];
-
-            if (noneBtn.classList.contains('active')) {
-                repeatType = 'none';
-            } else if (dailyBtn.classList.contains('active')) {
-                repeatType = 'daily';
-            } else {
-                const activeDays = Array.from(dayButtons).filter(b => b.classList.contains('active'));
-                if (activeDays.length > 0) {
-                    repeatType = 'weekly';
-                    repeatDays = activeDays.map(b => parseInt(b.dataset.value));
+                const input = document.getElementById('taskInput');
+                if (!input) return;
+                const text = input.value.trim();
+                if (!text) {
+                    input.setCustomValidity('Введите текст задачи');
+                    input.reportValidity();
+                    return;
                 } else {
-                    repeatType = 'none';
+                    input.setCustomValidity('');
                 }
-            }
 
-            const groupId = document.getElementById('groupSelect').value || null;
-            let color = '#94a3b8';
-            if (groupId) {
-                const grp = groups.find(g => g.id === groupId);
-                if (grp) color = grp.color;
-            }
+                const date = document.getElementById('taskDate')?.value || getToday();
+                const startTime = document.getElementById('startTime')?.value || '';
+                const endTime = document.getElementById('endTime')?.value || '';
+                const repeatEnd = document.getElementById('repeatEnd')?.value || '';
 
-            const newTask = {
-                id: 'task' + Date.now(),
-                text: text,
-                date: date,
-                startTime: startTime,
-                endTime: endTime,
-                color: color,
-                groupId: groupId,
-                repeatType: repeatType,
-                repeatDays: repeatDays,
-                repeatEnd: repeatEnd || null,
-                completedDates: [],
-            };
+                if (startTime && endTime && startTime > endTime) {
+                    const startInput = document.getElementById('startTime');
+                    if (startInput) {
+                        startInput.setCustomValidity('Время начала не может быть позже времени окончания');
+                        startInput.reportValidity();
+                    }
+                    return;
+                } else {
+                    const startInput = document.getElementById('startTime');
+                    if (startInput) startInput.setCustomValidity('');
+                }
 
-            tasks.push(newTask);
-            saveData();
-            input.value = '';
-            document.getElementById('repeatEnd').value = '';
-            document.getElementById('groupSelect').value = '';
-            dayButtons.forEach(b => b.classList.remove('active'));
-            dailyBtn.classList.remove('active');
-            noneBtn.classList.add('active');
-            renderAll();
-        });
+                if (repeatEnd && date > repeatEnd) {
+                    const repeatEndInput = document.getElementById('repeatEnd');
+                    if (repeatEndInput) {
+                        repeatEndInput.setCustomValidity('Дата задачи не может быть позже даты окончания повторения');
+                        repeatEndInput.reportValidity();
+                    }
+                    return;
+                } else {
+                    const repeatEndInput = document.getElementById('repeatEnd');
+                    if (repeatEndInput) repeatEndInput.setCustomValidity('');
+                }
+
+                let repeatType = 'none';
+                let repeatDays = [];
+
+                if (noneBtn && noneBtn.classList.contains('active')) {
+                    repeatType = 'none';
+                } else if (dailyBtn && dailyBtn.classList.contains('active')) {
+                    repeatType = 'daily';
+                } else {
+                    const activeDays = Array.from(dayButtons).filter(b => b.classList.contains('active'));
+                    if (activeDays.length > 0) {
+                        repeatType = 'weekly';
+                        repeatDays = activeDays.map(b => parseInt(b.dataset.value));
+                    } else {
+                        repeatType = 'none';
+                    }
+                }
+
+                const groupId = document.getElementById('groupSelect')?.value || null;
+                let color = '#94a3b8';
+                if (groupId) {
+                    const grp = groups.find(g => g.id === groupId);
+                    if (grp) color = grp.color;
+                }
+
+                const newTask = {
+                    id: 'task' + Date.now(),
+                    text: text,
+                    date: date,
+                    startTime: startTime,
+                    endTime: endTime,
+                    color: color,
+                    groupId: groupId,
+                    repeatType: repeatType,
+                    repeatDays: repeatDays,
+                    repeatEnd: repeatEnd || null,
+                    completedDates: [],
+                };
+
+                tasks.push(newTask);
+                saveData();
+                input.value = '';
+                if (document.getElementById('repeatEnd')) document.getElementById('repeatEnd').value = '';
+                if (document.getElementById('groupSelect')) document.getElementById('groupSelect').value = '';
+                dayButtons.forEach(b => b.classList.remove('active'));
+                if (dailyBtn) dailyBtn.classList.remove('active');
+                if (noneBtn) noneBtn.classList.add('active');
+
+                // Если мы в режиме добавления, переключаемся обратно на просмотр
+                const todayContainer = document.getElementById('selectedDateTasksContainer');
+                if (todayContainer && todayContainer.classList.contains('hidden')) {
+                    toggleAddMode();
+                }
+                renderAll();
+            });
+        }
 
         // Переключение вкладок
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -925,28 +1014,43 @@ if ('serviceWorker' in navigator) {
             });
         });
 
-        // Переключение видов
+        // --- Переключение видов (День, Неделя, Месяц, Свой промежуток, Все задачи) ---
         document.querySelectorAll('.view-btn').forEach(btn => {
             btn.addEventListener('click', function() {
+                const wasActive = this.classList.contains('active');
+                // Снимаем активность со всех
                 document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+                // Активируем текущую
                 this.classList.add('active');
                 currentView = this.dataset.view;
+
+                // Если вкладка была уже активна, сбрасываем на сегодня
+                if (wasActive && currentView !== 'all' && currentView !== 'custom') {
+                    selectedDate = getToday();
+                }
+
                 const customContainer = document.getElementById('customRangeContainer');
-                if (currentView === 'custom') {
-                    customContainer.style.display = 'flex';
-                    document.getElementById('customStart').value = customStart;
-                    document.getElementById('customEnd').value = customEnd;
-                } else {
-                    customContainer.style.display = 'none';
+                if (customContainer) {
+                    if (currentView === 'custom') {
+                        customContainer.style.display = 'flex';
+                        const cs = document.getElementById('customStart');
+                        const ce = document.getElementById('customEnd');
+                        if (cs) cs.value = customStart;
+                        if (ce) ce.value = customEnd;
+                    } else {
+                        customContainer.style.display = 'none';
+                    }
                 }
                 const controls = document.getElementById('calendarControls');
-                controls.style.display = (currentView === 'all') ? 'none' : 'flex';
+                if (controls) {
+                    controls.style.display = (currentView === 'all') ? 'none' : 'flex';
+                }
                 renderCalendar();
             });
         });
 
         // Навигация
-        document.getElementById('calendarPrev').addEventListener('click', function() {
+        document.getElementById('calendarPrev')?.addEventListener('click', function() {
             if (currentView === 'all') return;
             const d = parseLocalDate(selectedDate);
             if (currentView === 'day') d.setDate(d.getDate() - 1);
@@ -957,7 +1061,7 @@ if ('serviceWorker' in navigator) {
             renderAll();
         });
 
-        document.getElementById('calendarNext').addEventListener('click', function() {
+        document.getElementById('calendarNext')?.addEventListener('click', function() {
             if (currentView === 'all') return;
             const d = parseLocalDate(selectedDate);
             if (currentView === 'day') d.setDate(d.getDate() + 1);
@@ -969,32 +1073,53 @@ if ('serviceWorker' in navigator) {
         });
 
         // Custom range
-        document.getElementById('applyCustomRange').addEventListener('click', function() {
-            const start = document.getElementById('customStart').value;
-            const end = document.getElementById('customEnd').value;
+        document.getElementById('applyCustomRange')?.addEventListener('click', function() {
+            const start = document.getElementById('customStart')?.value;
+            const end = document.getElementById('customEnd')?.value;
             if (!start || !end) {
-                document.getElementById('customEnd').setCustomValidity('Выберите обе даты');
-                document.getElementById('customEnd').reportValidity();
+                const ce = document.getElementById('customEnd');
+                if (ce) {
+                    ce.setCustomValidity('Выберите обе даты');
+                    ce.reportValidity();
+                }
                 return;
             }
             if (start > end) {
-                document.getElementById('customEnd').setCustomValidity('Дата начала не может быть позже даты конца');
-                document.getElementById('customEnd').reportValidity();
+                const ce = document.getElementById('customEnd');
+                if (ce) {
+                    ce.setCustomValidity('Дата начала не может быть позже даты конца');
+                    ce.reportValidity();
+                }
                 return;
             }
-            document.getElementById('customEnd').setCustomValidity('');
+            const ce = document.getElementById('customEnd');
+            if (ce) ce.setCustomValidity('');
             customStart = start;
             customEnd = end;
             renderCalendar();
         });
 
         // Старт
+        const todayContainer = document.getElementById('selectedDateTasksContainer');
+        const addContainer = document.getElementById('addTaskContainer');
+        if (todayContainer) todayContainer.classList.remove('hidden');
+        if (addContainer) addContainer.classList.add('hidden');
+        if (toggleBtn) {
+            toggleBtn.classList.remove('active');
+            toggleBtn.textContent = '+';
+        }
+
         switchTab('calendar');
         currentView = 'day';
-        document.querySelector('.view-btn[data-view="day"]').classList.add('active');
-        document.getElementById('customRangeContainer').style.display = 'none';
-        noneBtn.classList.add('active');
+        const dayViewBtn = document.querySelector('.view-btn[data-view="day"]');
+        if (dayViewBtn) dayViewBtn.classList.add('active');
+        const customContainer = document.getElementById('customRangeContainer');
+        if (customContainer) customContainer.style.display = 'none';
+        if (noneBtn) noneBtn.classList.add('active');
+
+        updateDateTime();
         renderAll();
+        setInterval(updateDateTime, 1000);
     }
 
     document.addEventListener('DOMContentLoaded', init);
