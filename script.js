@@ -82,9 +82,9 @@
         if (tasks.length === 0) {
             const today = getToday();
             tasks = [
-                { id: '1', text: 'Позвонить клиенту', completed: false, date: today, startTime: '10:00', endTime: '10:30' },
-                { id: '2', text: 'Подготовить отчёт', completed: true, date: today, startTime: '14:00', endTime: '16:00' },
-                { id: '3', text: 'Запланировать встречу', completed: false, date: today, startTime: '17:00', endTime: '18:00' },
+                { id: '1', text: 'Позвонить клиенту', completed: false, date: today, startTime: '10:00', endTime: '10:30', color: '#94a3b8' },
+                { id: '2', text: 'Подготовить отчёт', completed: true, date: today, startTime: '14:00', endTime: '16:00', color: '#94a3b8' },
+                { id: '3', text: 'Запланировать встречу', completed: false, date: today, startTime: '17:00', endTime: '18:00', color: '#94a3b8' },
             ];
             saveTasks();
         }
@@ -94,29 +94,41 @@
         localStorage.setItem('tasks', JSON.stringify(tasks));
     }
 
-    // --- Создание элемента задачи с поддержкой редактирования времени и текста ---
+    // --- Создание элемента задачи ---
     function createTaskElement(task, onUpdate) {
         const li = document.createElement('li');
         li.className = 'task-item' + (task.completed ? ' completed' : '');
         li.dataset.id = task.id;
 
-        // Чекбокс
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = task.completed;
-        checkbox.className = 'task-checkbox';
-        checkbox.addEventListener('change', () => {
-            task.completed = checkbox.checked;
+        // ----- Цветовой кружок (выбор цвета) -----
+        const colorCircle = document.createElement('span');
+        colorCircle.className = 'task-color';
+        colorCircle.style.backgroundColor = task.color || '#94a3b8';
+        colorCircle.title = 'Выбрать цвет задачи';
+        // Скрытый input для выбора цвета
+        const colorInput = document.createElement('input');
+        colorInput.type = 'color';
+        colorInput.className = 'color-picker-input';
+        colorInput.value = task.color || '#94a3b8';
+        colorInput.style.display = 'none';
+        colorCircle.appendChild(colorInput);
+        colorCircle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            colorInput.click();
+        });
+        colorInput.addEventListener('input', function() {
+            task.color = this.value;
+            colorCircle.style.backgroundColor = this.value;
             saveTasks();
-            if (onUpdate) onUpdate();
+            // не обновляем весь список, только цвет
         });
 
-        // Статическое время
+        // ----- Статическое время -----
         const timeSpan = document.createElement('span');
         timeSpan.className = 'task-time';
         timeSpan.textContent = getTimeDisplay(task);
 
-        // Поля редактирования времени
+        // ----- Поля редактирования времени -----
         const startInput = document.createElement('input');
         startInput.type = 'time';
         startInput.className = 'edit-time-input';
@@ -131,28 +143,43 @@
         separator.className = 'edit-time-separator';
         separator.textContent = ' – ';
 
-        // Текст задачи
+        // ----- Текст задачи (будет снизу) -----
         const textSpan = document.createElement('span');
         textSpan.className = 'task-text';
         textSpan.textContent = task.text;
+        // Клик по тексту переключает статус
+        textSpan.addEventListener('click', function(e) {
+            e.stopPropagation();
+            task.completed = !task.completed;
+            li.classList.toggle('completed', task.completed);
+            saveTasks();
+            if (onUpdate) onUpdate();
+        });
 
-        // Кнопка редактирования
+        // ----- Кнопка редактирования (карандаш) -----
         const editBtn = document.createElement('button');
         editBtn.className = 'edit-btn';
         editBtn.innerHTML = '✎';
         editBtn.setAttribute('aria-label', 'Редактировать задачу');
         editBtn.title = 'Редактировать';
 
-        // Кнопка удаления
+        // ----- Кнопка удаления (крестик) -----
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-btn';
         deleteBtn.innerHTML = '✕';
         deleteBtn.setAttribute('aria-label', 'Удалить задачу');
+        deleteBtn.title = 'Удалить';
         deleteBtn.addEventListener('click', () => {
             tasks = tasks.filter(t => t.id !== task.id);
             saveTasks();
             if (onUpdate) onUpdate();
         });
+
+        // Контейнер для кнопок (карандаш и крестик) — прижат к правому краю
+        const actionsContainer = document.createElement('div');
+        actionsContainer.className = 'task-actions';
+        actionsContainer.appendChild(editBtn);
+        actionsContainer.appendChild(deleteBtn);
 
         // --- Логика редактирования ---
         let isEditing = false;
@@ -160,13 +187,11 @@
         let originalStart = task.startTime || '';
         let originalEnd = task.endTime || '';
 
-        // Функция обновления данных задачи без завершения режима
         function updateData() {
             const newText = textSpan.textContent.trim();
             if (newText === '') {
-                // Если текст пустой, отменяем
                 cancelEdit();
-                return;
+                return false;
             }
             const newStart = startInput.value;
             const newEnd = endInput.value;
@@ -235,7 +260,7 @@
             timeSpan.textContent = getTimeDisplay(task);
         }
 
-        // Обработчики событий для кнопки редактирования
+        // --- События для кнопок и полей ---
         editBtn.addEventListener('click', function(e) {
             e.stopPropagation();
             if (isEditing) {
@@ -245,7 +270,6 @@
             }
         });
 
-        // Обработчики для текста
         textSpan.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -258,14 +282,11 @@
 
         textSpan.addEventListener('blur', function(e) {
             if (isEditing) {
-                // Если фокус переходит на одно из полей времени, не завершаем редактирование
                 const related = e.relatedTarget;
                 if (related === startInput || related === endInput) {
-                    // Просто обновляем данные, не завершая
                     updateData();
                     return;
                 }
-                // Иначе сохраняем и завершаем
                 saveEdit();
             }
         });
@@ -274,7 +295,6 @@
             if (isEditing) e.stopPropagation();
         });
 
-        // Обработчики для полей времени
         startInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -325,15 +345,14 @@
             e.stopPropagation();
         });
 
-        // Сборка элемента: чекбокс, статическое время, поля времени (скрыты), текст, карандаш, крестик
-        li.appendChild(checkbox);
+        // ----- Сборка элемента -----
+        li.appendChild(colorCircle);
         li.appendChild(timeSpan);
         li.appendChild(startInput);
         li.appendChild(separator);
         li.appendChild(endInput);
-        li.appendChild(textSpan);
-        li.appendChild(editBtn);
-        li.appendChild(deleteBtn);
+        li.appendChild(actionsContainer); // контейнер с карандашом и крестиком
+        li.appendChild(textSpan);          // текст внизу
 
         return li;
     }
@@ -579,7 +598,6 @@
         loadTasks();
         document.getElementById('taskDate').value = getToday();
 
-        // Валидация времени при добавлении
         const startTimeInput = document.getElementById('startTime');
         const endTimeInput = document.getElementById('endTime');
 
@@ -620,7 +638,8 @@
                 completed: false,
                 date: date,
                 startTime: startVal || '',
-                endTime: endVal || ''
+                endTime: endVal || '',
+                color: '#94a3b8'
             };
             tasks.push(newTask);
             saveTasks();
@@ -628,7 +647,6 @@
             renderAll();
         });
 
-        // Валидация custom диапазона
         const customStartInput = document.getElementById('customStart');
         const customEndInput = document.getElementById('customEnd');
 
@@ -670,14 +688,12 @@
             renderCalendar();
         });
 
-        // Переключение вкладок
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 switchTab(this.dataset.tab);
             });
         });
 
-        // Переключение видов
         document.querySelectorAll('.view-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
@@ -697,7 +713,6 @@
             });
         });
 
-        // Навигация
         document.getElementById('calendarPrev').addEventListener('click', function() {
             if (currentView === 'all') return;
             const d = parseLocalDate(selectedDate);
@@ -720,7 +735,6 @@
             renderAll();
         });
 
-        // Старт
         switchTab('calendar');
         currentView = 'day';
         document.querySelector('.view-btn[data-view="day"]').classList.add('active');
