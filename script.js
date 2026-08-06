@@ -1,6 +1,11 @@
 // script.js
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/Task-Planner/sw.js')
+    .then(() => console.log('Service Worker зарегистрирован!'))
+    .catch(err => console.log('Ошибка регистрации SW:', err));
+}
+
 (function() {
-    // --- Модели данных ---
     let tasks = [];
     let groups = [];
 
@@ -24,6 +29,18 @@
             ];
             saveData();
         }
+
+        // Миграция: преобразуем старые задачи с полем completed в completedDates
+        tasks.forEach(task => {
+            if (task.completed !== undefined && task.completedDates === undefined) {
+                task.completedDates = task.completed ? [task.date] : [];
+                delete task.completed;
+            }
+            if (task.completedDates === undefined) {
+                task.completedDates = [];
+            }
+        });
+        saveData();
     }
 
     function saveData() {
@@ -51,6 +68,11 @@
     function formatDate(dateStr) {
         const d = parseLocalDate(dateStr);
         return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    function formatDateShort(dateStr) {
+        const d = parseLocalDate(dateStr);
+        return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
     }
 
     function getWeekDays(refDate) {
@@ -88,16 +110,14 @@
         }
     }
 
-    // --- Проверка видимости задачи на дату (с учётом повторения и даты создания) ---
+    // --- Проверка видимости задачи на дату ---
     function isTaskVisibleOnDate(task, dateStr) {
-        // Проверка периода окончания
         if (task.repeatEnd && dateStr > task.repeatEnd) return false;
 
         if (!task.repeatType || task.repeatType === 'none') {
             return task.date === dateStr;
         }
 
-        // Для повторяющихся задач: дата должна быть >= даты создания задачи
         if (dateStr < task.date) return false;
 
         const d = parseLocalDate(dateStr);
@@ -120,52 +140,83 @@
         return tasks;
     }
 
+    // --- Формирование строки повторения ---
+    function getRepeatDisplay(task) {
+        if (!task.repeatType || task.repeatType === 'none') return null;
+
+        let parts = [];
+        const dayNames = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
+
+        if (task.repeatType === 'daily') {
+            parts.push('Ежедневно');
+        } else if (task.repeatType === 'weekly') {
+            if (task.repeatDays && task.repeatDays.length > 0) {
+                const sorted = [...task.repeatDays].sort((a, b) => a - b);
+                const dayStr = sorted.map(d => dayNames[d]).join(', ');
+                parts.push(`Еженедельно: ${dayStr}`);
+            } else {
+                parts.push('Еженедельно');
+            }
+        }
+
+        if (task.repeatEnd) {
+            parts.push(`до ${formatDateShort(task.repeatEnd)}`);
+        }
+
+        return parts.join(' ');
+    }
+
     // --- Создание элемента задачи ---
-    function createTaskElement(task, onUpdate) {
+    function createTaskElement(task, currentDate, onUpdate) {
         const li = document.createElement('li');
-        li.className = 'task-item' + (task.completed ? ' completed' : '');
+        // Определяем выполнена ли задача на текущую дату
+        let isCompleted = false;
+        if (task.repeatType === 'none') {
+            isCompleted = task.completedDates && task.completedDates.includes(task.date);
+        } else {
+            isCompleted = task.completedDates && task.completedDates.includes(currentDate);
+        }
+        li.className = 'task-item' + (isCompleted ? ' completed' : '');
         li.dataset.id = task.id;
 
-        // Определяем группу
         const grp = task.groupId ? groups.find(g => g.id === task.groupId) : null;
 
-        // Создаём метку группы или кружок цвета с единым подходом
+        // Метка группы
         const label = document.createElement('div');
         label.className = 'task-group-label';
 
-        // Цветной кружок
         const colorSpan = document.createElement('span');
         colorSpan.className = 'group-color';
         colorSpan.style.backgroundColor = task.color || (grp ? grp.color : '#6b7280');
         label.appendChild(colorSpan);
 
-        // Название
         const nameSpan = document.createElement('span');
         nameSpan.className = 'group-name';
         nameSpan.textContent = grp ? grp.name : 'Без группы';
         label.appendChild(nameSpan);
 
-        // Скрытый input для выбора цвета (всегда присутствует)
         const colorInput = document.createElement('input');
         colorInput.type = 'color';
         colorInput.className = 'color-picker-input';
         colorInput.value = task.color || (grp ? grp.color : '#6b7280');
         label.appendChild(colorInput);
 
-        // Клик по метке открывает диалог выбора цвета
         label.addEventListener('click', function(e) {
             e.stopPropagation();
             colorInput.click();
         });
 
-        // При изменении цвета обновляем задачу и кружок
         colorInput.addEventListener('input', function() {
             task.color = this.value;
             colorSpan.style.backgroundColor = this.value;
             saveData();
         });
 
-        // Время
+        // ---- Время и повторение в одной строке ----
+        const timeWrapper = document.createElement('div');
+        timeWrapper.className = 'task-time-wrapper';
+
+        // Статическое время
         const timeSpan = document.createElement('span');
         timeSpan.className = 'task-time';
         timeSpan.textContent = getTimeDisplay(task);
@@ -185,21 +236,26 @@
         separator.className = 'edit-time-separator';
         separator.textContent = ' – ';
 
-        // Текст задачи
-        const textSpan = document.createElement('span');
-        textSpan.className = 'task-text';
-        textSpan.textContent = task.text;
+        // Информация о повторении
+        const repeatInfo = document.createElement('span');
+        repeatInfo.className = 'task-repeat-info';
+        const repeatText = getRepeatDisplay(task);
+        if (repeatText) {
+            repeatInfo.textContent = repeatText;
+        } else {
+            repeatInfo.style.display = 'none';
+        }
 
-        textSpan.addEventListener('click', function(e) {
-            if (textSpan.classList.contains('editing')) return;
-            e.stopPropagation();
-            task.completed = !task.completed;
-            li.classList.toggle('completed', task.completed);
-            saveData();
-            if (onUpdate) onUpdate();
-        });
+        timeWrapper.appendChild(timeSpan);
+        timeWrapper.appendChild(startInput);
+        timeWrapper.appendChild(separator);
+        timeWrapper.appendChild(endInput);
+        timeWrapper.appendChild(repeatInfo);
 
-        // Кнопки действий
+        // ---- Кнопки действий (справа) ----
+        const actionsContainer = document.createElement('div');
+        actionsContainer.className = 'task-actions';
+
         const editBtn = document.createElement('button');
         editBtn.className = 'edit-btn';
         editBtn.innerHTML = '✎';
@@ -217,10 +273,41 @@
             if (onUpdate) onUpdate();
         });
 
-        const actionsContainer = document.createElement('div');
-        actionsContainer.className = 'task-actions';
         actionsContainer.appendChild(editBtn);
         actionsContainer.appendChild(deleteBtn);
+
+        // ---- Текст задачи (на новой строке) ----
+        const textSpan = document.createElement('span');
+        textSpan.className = 'task-text';
+        textSpan.textContent = task.text;
+
+        // Клик по тексту переключает выполнение на текущую дату
+        textSpan.addEventListener('click', function(e) {
+            if (textSpan.classList.contains('editing')) return;
+            e.stopPropagation();
+
+            // Определяем дату для переключения
+            let toggleDate;
+            if (task.repeatType === 'none') {
+                toggleDate = task.date;
+            } else {
+                toggleDate = currentDate;
+            }
+
+            if (!task.completedDates) task.completedDates = [];
+            const index = task.completedDates.indexOf(toggleDate);
+            if (index !== -1) {
+                task.completedDates.splice(index, 1);
+            } else {
+                task.completedDates.push(toggleDate);
+            }
+
+            // Обновляем класс completed
+            const newIsCompleted = task.completedDates.includes(toggleDate);
+            li.classList.toggle('completed', newIsCompleted);
+            saveData();
+            if (onUpdate) onUpdate();
+        });
 
         // --- Логика редактирования ---
         let isEditing = false;
@@ -236,7 +323,6 @@
             }
             const newStart = startInput.value;
             const newEnd = endInput.value;
-            // Проверка времени: начало не позже конца
             if (newStart && newEnd && newStart > newEnd) {
                 startInput.setCustomValidity('Время начала не может быть позже времени окончания');
                 startInput.reportValidity();
@@ -303,7 +389,6 @@
             timeSpan.style.display = 'inline';
             textSpan.textContent = task.text;
             timeSpan.textContent = getTimeDisplay(task);
-            // Сброс ошибок
             startInput.setCustomValidity('');
         }
 
@@ -393,10 +478,7 @@
 
         // Сборка
         li.appendChild(label);
-        li.appendChild(timeSpan);
-        li.appendChild(startInput);
-        li.appendChild(separator);
-        li.appendChild(endInput);
+        li.appendChild(timeWrapper);
         li.appendChild(actionsContainer);
         li.appendChild(textSpan);
 
@@ -454,7 +536,6 @@
 
         const tasksForDate = getTasksForDate(date);
         tasksForDate.sort((a, b) => {
-            if (a.completed !== b.completed) return a.completed ? 1 : -1;
             if (a.startTime && b.startTime) return a.startTime.localeCompare(b.startTime);
             return 0;
         });
@@ -464,7 +545,7 @@
             container.innerHTML = '<li class="task-item" style="justify-content:center; background:transparent; border:none; color:#94a3b8; padding:1rem 0;">Нет задач</li>';
         } else {
             tasksForDate.forEach(task => {
-                const li = createTaskElement(task, () => {
+                const li = createTaskElement(task, date, () => {
                     renderTasksForDate(date);
                     if (currentView !== 'all') renderCalendar();
                 });
@@ -483,12 +564,10 @@
         }
         const wrapper = document.createElement('div');
         wrapper.className = 'all-tasks-view';
-        const sorted = [...allTasks].sort((a, b) => {
-            if (a.completed !== b.completed) return a.completed ? 1 : -1;
-            return a.date.localeCompare(b.date);
-        });
+        const today = getToday();
+        const sorted = [...allTasks].sort((a, b) => a.date.localeCompare(b.date));
         sorted.forEach(task => {
-            const li = createTaskElement(task, () => {
+            const li = createTaskElement(task, today, () => {
                 renderAllTasksView(container);
                 if (currentView !== 'all') renderCalendar();
             });
@@ -626,14 +705,15 @@
 
     function renderArchive() {
         const archiveList = document.getElementById('archiveList');
-        const completedTasks = tasks.filter(t => t.completed);
+        const completedTasks = tasks.filter(t => t.completedDates && t.completedDates.length > 0);
         archiveList.innerHTML = '';
         if (completedTasks.length === 0) {
             archiveList.innerHTML = '<li class="task-item" style="justify-content:center; background:transparent; border:none; color:#94a3b8;">Нет выполненных задач</li>';
         } else {
+            const today = getToday();
             completedTasks.sort((a, b) => a.date.localeCompare(b.date));
             completedTasks.forEach(task => {
-                const li = createTaskElement(task, () => {
+                const li = createTaskElement(task, today, () => {
                     renderArchive();
                     if (currentView !== 'all') renderCalendar();
                 });
@@ -645,18 +725,18 @@
     function renderStats() {
         const container = document.getElementById('statsDetail');
         const total = tasks.length;
-        const completed = tasks.filter(t => t.completed).length;
+        const completed = tasks.filter(t => t.completedDates && t.completedDates.length > 0).length;
         const incomplete = total - completed;
         const today = getToday();
         const todayTasks = getTasksForDate(today);
-        const todayCompleted = todayTasks.filter(t => t.completed).length;
+        const todayCompleted = todayTasks.filter(t => t.completedDates && t.completedDates.includes(today)).length;
         const weekDays = getWeekDays(today);
         const weekTasks = tasks.filter(t => weekDays.some(d => isTaskVisibleOnDate(t, d)));
-        const weekCompleted = weekTasks.filter(t => t.completed).length;
+        const weekCompleted = weekTasks.filter(t => t.completedDates && t.completedDates.some(d => weekDays.includes(d))).length;
 
         let html = `
             <div class="stat-row"><span class="label">Всего задач</span><span class="value">${total}</span></div>
-            <div class="stat-row"><span class="label">Выполнено</span><span class="value">${completed}</span></div>
+            <div class="stat-row"><span class="label">Выполнено (хотя бы раз)</span><span class="value">${completed}</span></div>
             <div class="stat-row"><span class="label">Не выполнено</span><span class="value">${incomplete}</span></div>
             <div class="stat-row"><span class="label">Задач на сегодня</span><span class="value">${todayTasks.length}</span></div>
             <div class="stat-row"><span class="label">Выполнено сегодня</span><span class="value">${todayCompleted}</span></div>
@@ -684,10 +764,9 @@
         renderGroups();
         populateGroupSelect();
 
-        // Устанавливаем дату по умолчанию
         document.getElementById('taskDate').value = getToday();
 
-        // --- Добавление группы ---
+        // Добавление группы
         document.getElementById('addGroupBtn').addEventListener('click', function() {
             const nameInput = document.getElementById('groupNameInput');
             const colorInput = document.getElementById('groupColorInput');
@@ -710,7 +789,7 @@
             nameInput.value = '';
         });
 
-        // --- Выбор группы подставляет текст ---
+        // Выбор группы подставляет текст
         document.getElementById('groupSelect').addEventListener('change', function() {
             const selectedId = this.value;
             if (selectedId) {
@@ -723,7 +802,7 @@
             }
         });
 
-        // --- Повторение: кнопки (множественный выбор) ---
+        // Повторение: кнопки (множественный выбор)
         const repeatButtons = document.querySelectorAll('.repeat-btn');
         const dayButtons = document.querySelectorAll('.day-btn');
         const noneBtn = document.querySelector('.repeat-btn[data-value="none"]');
@@ -755,7 +834,7 @@
             this.classList.add('active');
         });
 
-        // --- Добавление задачи ---
+        // Добавление задачи
         document.getElementById('taskForm').addEventListener('submit', function(e) {
             e.preventDefault();
 
@@ -774,7 +853,6 @@
             const endTime = document.getElementById('endTime').value || '';
             const repeatEnd = document.getElementById('repeatEnd').value || '';
 
-            // Проверка: время начала не позже конца
             if (startTime && endTime && startTime > endTime) {
                 document.getElementById('startTime').setCustomValidity('Время начала не может быть позже времени окончания');
                 document.getElementById('startTime').reportValidity();
@@ -783,7 +861,6 @@
                 document.getElementById('startTime').setCustomValidity('');
             }
 
-            // Проверка: дата задачи не позже repeatEnd
             if (repeatEnd && date > repeatEnd) {
                 document.getElementById('repeatEnd').setCustomValidity('Дата задачи не может быть позже даты окончания повторения');
                 document.getElementById('repeatEnd').reportValidity();
@@ -792,7 +869,6 @@
                 document.getElementById('repeatEnd').setCustomValidity('');
             }
 
-            // Определяем тип повторения
             let repeatType = 'none';
             let repeatDays = [];
 
@@ -810,7 +886,6 @@
                 }
             }
 
-            // Группа
             const groupId = document.getElementById('groupSelect').value || null;
             let color = '#94a3b8';
             if (groupId) {
@@ -821,7 +896,6 @@
             const newTask = {
                 id: 'task' + Date.now(),
                 text: text,
-                completed: false,
                 date: date,
                 startTime: startTime,
                 endTime: endTime,
@@ -830,12 +904,12 @@
                 repeatType: repeatType,
                 repeatDays: repeatDays,
                 repeatEnd: repeatEnd || null,
+                completedDates: [],
             };
 
             tasks.push(newTask);
             saveData();
             input.value = '';
-            // Сброс формы
             document.getElementById('repeatEnd').value = '';
             document.getElementById('groupSelect').value = '';
             dayButtons.forEach(b => b.classList.remove('active'));
@@ -844,14 +918,14 @@
             renderAll();
         });
 
-        // --- Переключение вкладок ---
+        // Переключение вкладок
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 switchTab(this.dataset.tab);
             });
         });
 
-        // --- Переключение видов ---
+        // Переключение видов
         document.querySelectorAll('.view-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
@@ -871,7 +945,7 @@
             });
         });
 
-        // --- Навигация ---
+        // Навигация
         document.getElementById('calendarPrev').addEventListener('click', function() {
             if (currentView === 'all') return;
             const d = parseLocalDate(selectedDate);
@@ -894,7 +968,7 @@
             renderAll();
         });
 
-        // --- Custom range ---
+        // Custom range
         document.getElementById('applyCustomRange').addEventListener('click', function() {
             const start = document.getElementById('customStart').value;
             const end = document.getElementById('customEnd').value;
@@ -914,7 +988,7 @@
             renderCalendar();
         });
 
-        // --- Старт ---
+        // Старт
         switchTab('calendar');
         currentView = 'day';
         document.querySelector('.view-btn[data-view="day"]').classList.add('active');
