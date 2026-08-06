@@ -15,55 +15,70 @@
                 <h1>📋 Мои задачи</h1>
             </header>
 
-            <!-- Блок ГРУПП -->
-            <section class="groups-section">
-                <h3>Группы</h3>
-                <div class="groups-list" id="groupsList">
-                    <!-- Группы будут добавлены скриптом -->
+            <!-- Блок с датой, временем и кнопкой добавления -->
+            <div class="today-header">
+                <div class="datetime">
+                    <span class="date" id="todayDate">Сегодня</span>
+                    <span class="time" id="currentTime">00:00</span>
                 </div>
-                <div class="group-add">
-                    <input type="text" id="groupNameInput" placeholder="Название группы" />
-                    <input type="color" id="groupColorInput" value="#3b82f6" class="group-color-picker" />
-                    <button id="addGroupBtn" class="round-btn">+</button>
-                </div>
+                <button id="toggleAddModeBtn" class="add-toggle-btn" title="Добавить задачу">+</button>
+            </div>
+
+            <!-- Блок с задачами на выбранную дату (левая панель) -->
+            <section class="today-tasks" id="selectedDateTasksContainer">
+                <h2 id="selectedDateTitle">Задачи на сегодня</h2>
+                <ul id="selectedDateTasksList">
+                    <!-- задачи будут добавлены скриптом -->
+                </ul>
             </section>
 
-            <!-- Блок планирования (дата, время, период) -->
-            <section class="planning" aria-label="Планирование задачи">
-                <div class="form-group">
-                    <label for="taskDate">Дата</label>
-                    <input type="date" id="taskDate" />
+            <!-- Блок добавления задачи (скрыт по умолчанию) -->
+            <section class="add-task hidden" id="addTaskContainer">
+                <!-- Группы (остаются всегда видимыми) -->
+                <div class="groups-section">
+                    <h3>Группы</h3>
+                    <div class="groups-list" id="groupsList">
+                        <!-- Группы будут добавлены скриптом -->
+                    </div>
+                    <div class="group-add">
+                        <input type="text" id="groupNameInput" placeholder="Название группы" />
+                        <input type="color" id="groupColorInput" value="#3b82f6" class="group-color-picker" />
+                        <button id="addGroupBtn" class="round-btn">+</button>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="repeatEnd">Повторять до</label>
-                    <input type="date" id="repeatEnd" />
-                </div>
-                <div class="form-group">
-                    <label for="startTime">Время начала</label>
-                    <input type="time" id="startTime" />
-                </div>
-                <div class="form-group">
-                    <label for="endTime">Время конца</label>
-                    <input type="time" id="endTime" />
-                </div>
-            </section>
 
-            <!-- Форма добавления задачи -->
-            <section class="add-task" aria-label="Добавление задачи">
+                <!-- Форма добавления задачи -->
                 <form id="taskForm" class="task-form">
-                    <!-- Группа -->
+                    <!-- Блок планирования (дата, время) -->
+                    <div class="planning-form">
+                        <div class="form-group">
+                            <label for="taskDate">Дата</label>
+                            <input type="date" id="taskDate" />
+                        </div>
+                        <div class="form-group">
+                            <label for="startTime">Время начала</label>
+                            <input type="time" id="startTime" />
+                        </div>
+                        <div class="form-group">
+                            <label for="endTime">Время конца</label>
+                            <input type="time" id="endTime" />
+                        </div>
+                        <div class="form-group">
+                            <label for="repeatEnd">Повторять до</label>
+                            <input type="date" id="repeatEnd" />
+                        </div>
+                    </div>
+
                     <div class="form-group full-width">
                         <label for="groupSelect">Группа</label>
                         <select id="groupSelect">
                             <option value="">Без группы</option>
                         </select>
                     </div>
-                    <!-- Текст задачи -->
                     <div class="form-group full-width">
                         <label for="taskInput">Текст задачи</label>
                         <input type="text" id="taskInput" placeholder="Введите задачу" required />
                     </div>
-                    <!-- Повторяемость (только кнопки) -->
                     <div class="form-group full-width repeat-group">
                         <label>Повторение</label>
                         <div class="repeat-controls">
@@ -112,10 +127,7 @@
                         <button id="applyCustomRange">Применить</button>
                     </div>
                     <div id="calendarView"></div>
-                    <div id="tasksForDateContainer" class="tasks-for-date">
-                        <h3 id="tasksForDateTitle">Задачи на выбранную дату</h3>
-                        <ul id="tasksForDateList"></ul>
-                    </div>
+                    <!-- Блок задач на дату удалён из правой панели -->
                 </div>
                 <div id="tab-archive" class="tab-pane">
                     <h3>Выполненные задачи</h3>
