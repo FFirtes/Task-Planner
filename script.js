@@ -131,8 +131,8 @@ if ('serviceWorker' in navigator) {
         }
     }
 
-    async function scheduleReminder(taskId, text, date, startTime, reminderOffset, groupName, groupColor) {
-        if (!startTime) return;
+    async function scheduleReminder(taskId, text, date, startTime, groupName, groupColor, reminderOffset = 0) {
+        if (!startTime || reminderOffset <= 0) return;
         try {
             // Создаём локальную дату из введенных пользователем значений
             const localDateTime = new Date(`${date}T${startTime}:00`);
@@ -141,12 +141,13 @@ if ('serviceWorker' in navigator) {
                 return;
             }
 
-            // Вычитаем выбранный промежуток времени (в минутах)
-            const reminderDateTime = new Date(localDateTime.getTime() - (reminderOffset || 0) * 60 * 1000);
+            // Вычисляем точное время отправки уведомления (отнимаем отступ в минутах)
+            const reminderDateTime = new Date(localDateTime.getTime() - reminderOffset * 60 * 1000);
 
-            // Преобразуем в UTC и определяем часовой пояс пользователя
-            const startDateTime = reminderDateTime.toISOString();
-            const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone; // например, "Europe/Moscow"
+            // Преобразуем в UTC/ISO
+            const startDateTime = localDateTime.toISOString();
+            const reminderTime = reminderDateTime.toISOString();
+            const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
             const response = await fetch(`${PUSH_SERVER_URL}/api/schedule`, {
                 method: 'POST',
@@ -155,8 +156,9 @@ if ('serviceWorker' in navigator) {
                     taskId: taskId,
                     text: text,
                     startDateTime: startDateTime,
-                    timeZone: userTimeZone,
+                    reminderTime: reminderTime,
                     reminderOffset: reminderOffset,
+                    timeZone: userTimeZone,
                     groupName: groupName || 'Без группы',
                     groupColor: groupColor || '#6b7280',
                     url: window.location.href,
@@ -1377,7 +1379,8 @@ if ('serviceWorker' in navigator) {
                 }
 
                 // Читаем выбранное время напоминания
-                const reminderOffset = parseInt(document.getElementById('reminderOffset')?.value, 10) || 0;
+                const reminderOffsetSelect = document.getElementById('reminderOffset');
+                const reminderOffset = reminderOffsetSelect ? parseInt(reminderOffsetSelect.value, 10) || 0 : 0;
 
                 const newTask = {
                     id: 'task' + Date.now(),
@@ -1398,7 +1401,7 @@ if ('serviceWorker' in navigator) {
                 tasks.push(newTask);
                 saveData();
 
-                // Планируем напоминание за выбранный промежуток времени
+                // Планируем напоминание, если указано время начала и передан интервал > 0
                 if (newTask.startTime && newTask.reminderOffset > 0) {
                     const groupName = newTask.groupId
                         ? groups.find(g => g.id === newTask.groupId)?.name || 'Без группы'
@@ -1406,12 +1409,23 @@ if ('serviceWorker' in navigator) {
                     const groupColor = newTask.groupId
                         ? groups.find(g => g.id === newTask.groupId)?.color || '#6b7280'
                         : '#6b7280';
-                    scheduleReminder(newTask.id, newTask.text, newTask.date, newTask.startTime, newTask.reminderOffset, groupName, groupColor);
+                    
+                    scheduleReminder(
+                        newTask.id,
+                        newTask.text,
+                        newTask.date,
+                        newTask.startTime,
+                        groupName,
+                        groupColor,
+                        newTask.reminderOffset
+                    );
                 }
 
+                // Очистка формы
                 input.value = '';
                 if (document.getElementById('repeatEnd')) document.getElementById('repeatEnd').value = '';
                 if (document.getElementById('groupSelect')) document.getElementById('groupSelect').value = '';
+                if (document.getElementById('reminderOffset')) document.getElementById('reminderOffset').value = '30';
                 dayButtons.forEach(b => b.classList.remove('active'));
                 if (dailyBtn) dailyBtn.classList.remove('active');
                 if (noneBtn) noneBtn.classList.add('active');
