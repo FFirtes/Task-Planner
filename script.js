@@ -1,8 +1,9 @@
-// script.js — обновлённая версия с поиском следующей задачи на завтра и без кавычек
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/Task-Planner/sw.js')
+if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js')
     .then(() => console.log('Service Worker зарегистрирован!'))
     .catch(err => console.log('Ошибка регистрации SW:', err));
+} else {
+  console.log('Service Worker не зарегистрирован');
 }
 
 (function() {
@@ -604,36 +605,44 @@ if ('serviceWorker' in navigator) {
         return `Задачи на ${dateStr}`;
     }
 
-    // --- Поиск текущей и следующей задачи (с учётом завтра) ---
-    function findCurrentAndNextTasks(date) {
-        const tasksForDate = getTasksForDate(date);
-        const now = new Date();
-        const currentTime = now.getHours() * 60 + now.getMinutes();
+    // --- Поиск текущей и следующей задачи (с учётом будущих дней до 7 дней) ---
+    // --- Вспомогательная функция для поиска следующей задачи в будущих днях (до 7 дней) ---
+    // Возвращает не только задачу, но и nextDate — фактическую дату повторения,
+    // на которую она приходится (для повторяющихся задач task.date — это дата
+    // создания задачи, а не дата конкретного будущего повторения).
+    function findNextTaskInFuture(now) {
+        for (let offset = 1; offset <= 7; offset++) {
+            const d = new Date(now);
+            d.setDate(d.getDate() + offset);
+            const dateStr = formatLocalDate(d);
+            const tasksForDate = getTasksForDate(dateStr);
+            const withTime = tasksForDate.filter(t => t.startTime);
+            if (withTime.length === 0) continue;
 
-        // Отбираем задачи с startTime
-        const withTime = tasksForDate.filter(t => t.startTime);
-        if (withTime.length === 0) {
-            // Если на сегодня нет задач с временем, ищем на завтра
-            const tomorrow = getTomorrow();
-            const tasksTomorrow = getTasksForDate(tomorrow);
-            const withTimeTomorrow = tasksTomorrow.filter(t => t.startTime);
-            if (withTimeTomorrow.length === 0) return { current: null, next: null };
-            // Сортируем завтрашние задачи по времени
-            const withMinTomorrow = withTimeTomorrow.map(t => {
+            // Преобразуем в минуты
+            const withMinutes = withTime.map(t => {
                 const parts = t.startTime.split(':').map(Number);
                 const startMinutes = parts[0] * 60 + parts[1];
-                let endMinutes = null;
-                if (t.endTime) {
-                    const endParts = t.endTime.split(':').map(Number);
-                    endMinutes = endParts[0] * 60 + endParts[1];
-                }
-                return { task: t, startMinutes, endMinutes };
+                return { task: t, startMinutes };
             });
-            withMinTomorrow.sort((a, b) => a.startMinutes - b.startMinutes);
-            // Берём самую раннюю как следующую
-            const nextTask = withMinTomorrow[0].task;
-            return { current: null, next: nextTask };
+
+            // Сортируем по startMinutes и берём самую раннюю задачу
+            withMinutes.sort((a, b) => a.startMinutes - b.startMinutes);
+
+            return { next: withMinutes[0].task, nextDate: dateStr };
         }
+        return { next: null, nextDate: null };
+    }
+
+    // --- Поиск текущей и следующей задачи ---
+    function findCurrentAndNextTasks(date) {
+        const now = new Date();
+        const currentTime = now.getHours() * 60 + now.getMinutes();
+        const todayStr = formatLocalDate(now);
+
+        // Получаем задачи на сегодня
+        const todayTasks = getTasksForDate(todayStr);
+        const withTime = todayTasks.filter(t => t.startTime);
 
         // Преобразуем в минуты
         const withMinutes = withTime.map(t => {
@@ -650,48 +659,37 @@ if ('serviceWorker' in navigator) {
         // Сортируем по startMinutes
         withMinutes.sort((a, b) => a.startMinutes - b.startMinutes);
 
-        // Текущая: start <= current <= end (end обязателен)
+        // Ищем текущую: start <= current < end (end обязателен, конец не включается —
+        // задача 22:52–23:55 перестаёт быть текущей ровно в 23:55, а не до 23:55:59)
         let current = null;
         for (let item of withMinutes) {
-            if (item.endMinutes !== null && item.startMinutes <= currentTime && currentTime <= item.endMinutes) {
+            if (item.endMinutes !== null && item.startMinutes <= currentTime && currentTime < item.endMinutes) {
                 current = item.task;
                 break;
             }
         }
 
-        // Следующая: первая с start > currentTime (или если current есть, то после неё)
+        // Ищем следующую на сегодня: первая с start > currentTime
         let next = null;
         for (let item of withMinutes) {
             if (item.startMinutes > currentTime) {
-                if (current) {
-                    if (item.startMinutes > (current.startTime ? parseTime(current.startTime) : 0)) {
-                        next = item.task;
-                        break;
-                    }
-                } else {
+                // Убедимся, что это не текущая задача (по id)
+                if (!current || item.task.id !== current.id) {
                     next = item.task;
                     break;
                 }
             }
         }
 
-        // Если следующей нет на сегодня, ищем на завтра
-        if (!next) {
-            const tomorrow = getTomorrow();
-            const tasksTomorrow = getTasksForDate(tomorrow);
-            const withTimeTomorrow = tasksTomorrow.filter(t => t.startTime);
-            if (withTimeTomorrow.length > 0) {
-                const withMinTomorrow = withTimeTomorrow.map(t => {
-                    const parts = t.startTime.split(':').map(Number);
-                    const startMinutes = parts[0] * 60 + parts[1];
-                    return { task: t, startMinutes };
-                });
-                withMinTomorrow.sort((a, b) => a.startMinutes - b.startMinutes);
-                next = withMinTomorrow[0].task;
-            }
+        if (next) {
+            // Следующая задача нашлась сегодня же
+            return { current, next, nextDate: todayStr };
         }
 
-        return { current, next };
+        // На сегодня следующей задачи нет — ищем в будущих днях.
+        // Текущую задачу (если найдена) сохраняем, а не теряем.
+        const future = findNextTaskInFuture(now);
+        return { current, next: future.next, nextDate: future.nextDate };
     }
 
     // Вспомогательная функция для парсинга времени в минуты
@@ -701,63 +699,59 @@ if ('serviceWorker' in navigator) {
     }
 
     // --- Рендеринг блока "Текущая / Следующая задача" ---
-function renderNextTask(date) {
-    const container = document.getElementById('nextTaskContainer');
-    if (!container) return;
+    function renderNextTask(date) {
+        const container = document.getElementById('nextTaskContainer');
+        if (!container) return;
 
-    const { current, next } = findCurrentAndNextTasks(date);
+        const { current, next, nextDate } = findCurrentAndNextTasks(date);
 
-    // Если нет ни текущей, ни следующей задачи
-    if (!current && !next) {
-        container.innerHTML = '<div class="next-task-empty">Нет предстоящих задач</div>';
-        return;
-    }
+        // Если нет ни текущей, ни следующей задачи
+        if (!current && !next) {
+            container.innerHTML = '<div class="next-task-empty">Нет предстоящих задач</div>';
+            return;
+        }
 
-    let html = '';
+        let html = '';
 
-    // ---- БЛОК ТЕКУЩЕЙ ЗАДАЧИ ----
-    if (current) {
-        // Если текущая задача есть — показываем её детали
-        const grp = current.groupId ? groups.find(g => g.id === current.groupId) : null;
-        const timeDisplay = getTimeDisplay(current);
-        const dateDisplay = formatDateWithDay(date);
-        html += `
-            <div class="next-task-item current">
-                <div class="next-header">Текущая задача</div>
-                <div class="next-details">
-                    <span class="next-time">${dateDisplay} ${timeDisplay}</span>
-                    <span class="next-group">
-                        <span class="group-color-dot" style="background:${current.color || (grp ? grp.color : '#6b7280')};"></span>
-                        ${grp ? grp.name : 'Без группы'}
-                    </span>
-                    <span class="next-text">${current.text}</span>
+        // ---- БЛОК ТЕКУЩЕЙ ЗАДАЧИ ----
+        if (current) {
+            // Если текущая задача есть — показываем её детали
+            const grp = current.groupId ? groups.find(g => g.id === current.groupId) : null;
+            const timeDisplay = getTimeDisplay(current);
+            // Текущая задача всегда сегодняшняя — дата всегда "сегодня"
+            const dateDisplay = formatDateWithDay(getToday());
+            html += `
+                <div class="next-task-item current">
+                    <div class="next-header">Текущая задача</div>
+                    <div class="next-details">
+                        <span class="next-time">${dateDisplay} ${timeDisplay}</span>
+                        <span class="next-group">
+                            <span class="group-color-dot" style="background:${current.color || (grp ? grp.color : '#6b7280')};"></span>
+                            ${grp ? grp.name : 'Без группы'}
+                        </span>
+                        <span class="next-text">${current.text}</span>
+                    </div>
                 </div>
-            </div>
-        `;
-    } else {
-        // Если текущей задачи нет — показываем заглушку
-        html += `
-            <div class="next-task-item current">
-                <div class="next-header">Текущая задача</div>
-                <div class="next-details" style="font-size: 0.9rem; color: #94a3b8; opacity: 0.8;">
-                    Нет задачи
+            `;
+        } else {
+            // Если текущей задачи нет — показываем заглушку
+            html += `
+                <div class="next-task-item current">
+                    <div class="next-header">Текущая задача</div>
+                    <div class="next-details" style="font-size: 0.9rem; color: #94a3b8; opacity: 0.8;">
+                        Нет задачи
+                    </div>
                 </div>
-            </div>
-        `;
-    }
+            `;
+        }
 
     // ---- БЛОК СЛЕДУЮЩЕЙ ЗАДАЧИ ----
     if (next) {
         const grp = next.groupId ? groups.find(g => g.id === next.groupId) : null;
         const timeDisplay = getTimeDisplay(next);
-        // Определяем дату для отображения
-        let dateForDisplay = date;
-        const today = getToday();
-        const tomorrow = getTomorrow();
-        if (next.date === today) dateForDisplay = today;
-        else if (next.date === tomorrow) dateForDisplay = tomorrow;
-        else dateForDisplay = next.date;
-        const dateDisplay = formatDateWithDay(dateForDisplay);
+        // nextDate — фактическая дата найденного повторения задачи
+        // (next.date для повторяющихся задач — это дата их создания, а не текущего повторения)
+        const dateDisplay = formatDateWithDay(nextDate);
         html += `
             <div class="next-task-item next">
                 <div class="next-header">Следующая задача</div>
