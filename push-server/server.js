@@ -123,7 +123,7 @@ async function processPendingReminders() {
           });
         }
 
-        const title = `⏰ Напоминание: ${rem.text}`;
+        const title = `Напоминание: ${rem.text}`;
         const body = `Группа: ${rem.groupName} | Начало: ${timeStr}`;
 
         await sendPushNotification(title, body, rem.url, rem.deviceId);
@@ -184,49 +184,52 @@ app.post('/api/send-notification', async (req, res) => {
 });
 
 app.post('/api/schedule', (req, res) => {
-  const { taskId, text, startDateTime, timeZone, groupName, groupColor, url, deviceId } = req.body;
+    const { 
+        taskId, 
+        text, 
+        startDateTime, 
+        reminderTime,    // <-- Берем рассчитанное клиентом время отправки
+        reminderOffset,  // <-- Выбранный интервал в минутах
+        groupName, 
+        groupColor, 
+        deviceId 
+    } = req.body;
 
-  if (!taskId || !text || !startDateTime) {
-    return res.status(400).json({ error: 'Не указаны taskId, text или startDateTime' });
-  }
+    if (!reminderTime) {
+        return res.status(400).json({ error: 'Не указано время напоминания (reminderTime)' });
+    }
 
-  const start = new Date(startDateTime);
-  if (isNaN(start.getTime())) {
-    return res.status(400).json({ error: 'Неверный формат даты/времени' });
-  }
+    // Преобразуем строку ISO в объект Date
+    const scheduleDate = new Date(reminderTime);
+    const now = new Date();
 
-  const now = new Date();
-  const remindAt = new Date(start.getTime() - 30 * 60 * 1000);
+    // Проверяем, не прошло ли уже время отправки
+    if (scheduleDate <= now) {
+        return res.status(400).json({ error: 'Время напоминания уже прошло' });
+    }
 
-  if (remindAt <= now) {
-    return res.json({
-      message: 'Время начала уже прошло или до него менее 30 минут, напоминание не запланировано'
+    // ------------------------------------------------------------------
+    // Ваша логика планирования (node-schedule, node-cron или setTimeout)
+    // ------------------------------------------------------------------
+    // Пример с использованием библиотеки node-schedule:
+    schedule.scheduleJob(taskId, scheduleDate, async function() {
+        console.log(`[Push] Отправка напоминания за ${reminderOffset} мин. для задачи: ${text}`);
+        
+        // Отправка Push-уведомления
+        await sendPushToDevice(deviceId, {
+            title: `Напоминание (${groupName})`,
+            body: `За ${reminderOffset} мин: ${text}`,
+            url: req.body.url
+        });
     });
-  }
 
-  const reminder = {
-    id: taskId,
-    text: text,
-    startDateTime: start.toISOString(),
-    timeZone: timeZone || 'UTC',
-    remindAt: remindAt.toISOString(),
-    groupName: groupName || 'Без группы',
-    groupColor: groupColor || '#6b7280',
-    url: url || '/',
-    deviceId: deviceId || null
-  };
+    console.log(`[Server] Напоминание запланировано на: ${scheduleDate.toLocaleString()}`);
 
-  // Перезаписываем старое напоминание с этим же id (при обновлении задачи)
-  reminders = reminders.filter(r => r.id !== taskId);
-  reminders.push(reminder);
-  saveReminders();
-
-  console.log(`📅 [Schedule] Запланировано напоминание для "${text}" на ${remindAt.toISOString()} (${deviceId})`);
-
-  res.json({
-    message: 'Напоминание запланировано',
-    reminder: reminder
-  });
+    res.json({ 
+        status: 'success', 
+        scheduledFor: scheduleDate,
+        offsetMinutes: reminderOffset 
+    });
 });
 
 app.get('/api/subscriptions', (req, res) => {
