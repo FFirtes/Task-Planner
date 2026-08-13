@@ -119,6 +119,33 @@ if ('serviceWorker' in navigator) {
         }
     }
 
+    // --- Планирование напоминания на сервере ---
+    async function scheduleReminder(taskId, text, date, startTime, groupName, groupColor) {
+        if (!startTime) return; // если нет времени начала, напоминание не нужно
+        try {
+            // Формируем полную дату-время в ISO формате
+            const startDateTime = `${date}T${startTime}:00`;
+
+            const response = await fetch(`${PUSH_SERVER_URL}/api/schedule`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                taskId: taskId,
+                text: text,
+                startDateTime: startDateTime,
+                groupName: groupName || 'Без группы',
+                groupColor: groupColor || '#6b7280',
+                url: window.location.href
+            })
+            });
+
+            const result = await response.json();
+            console.log('Напоминание запланировано:', result);
+        } catch (error) {
+            console.error('Ошибка планирования напоминания:', error);
+        }
+    }
+
     // --- Загрузка / сохранение ---
     function loadData() {
         const storedTasks = localStorage.getItem('tasks');
@@ -1342,6 +1369,17 @@ if ('serviceWorker' in navigator) {
 
                 tasks.push(newTask);
                 saveData();
+
+                // Планируем напоминание (если есть время начала)
+                if (newTask.startTime) {
+                    const groupName = newTask.groupId
+                        ? groups.find(g => g.id === newTask.groupId)?.name || 'Без группы'
+                        : 'Без группы';
+                    const groupColor = newTask.groupId
+                        ? groups.find(g => g.id === newTask.groupId)?.color || '#6b7280'
+                        : '#6b7280';
+                    scheduleReminder(newTask.id, newTask.text, newTask.date, newTask.startTime, groupName, groupColor);
+                }
 
                 // ====== ОТПРАВКА PUSH-УВЕДОМЛЕНИЯ ======
                 sendTaskNotification(newTask.text, newTask.date);
