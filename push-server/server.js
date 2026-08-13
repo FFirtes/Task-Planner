@@ -68,7 +68,7 @@ async function sendPushNotification(title, body, url, deviceId) {
   if (deviceId) {
     const found = subscriptions.find(s => s.deviceId === deviceId);
     if (!found) {
-      console.log(`⚠️ Устройство ${deviceId} не найдено`);
+      console.log(`⚠️ Устройство ${deviceId} не найдено. Всего подписок: ${subscriptions.length}`);
       return { successful: 0, failed: 0 };
     }
     targetSubscriptions = [found];
@@ -108,6 +108,7 @@ function scheduleReminder(reminder) {
   }
 
   const job = schedule.scheduleJob(reminder.id, remindAt, function() {
+    console.log(`⏰ Напоминание для "${reminder.text}" сработало в ${new Date().toISOString()}`);
     console.log(`⏰ Отправка напоминания для задачи: ${reminder.text}`);
     const title = `⏰ Напоминание: ${reminder.text}`;
     const timeStr = new Date(reminder.startDateTime).toLocaleTimeString('ru-RU', {
