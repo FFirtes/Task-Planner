@@ -131,7 +131,7 @@ if ('serviceWorker' in navigator) {
         }
     }
 
-    async function scheduleReminder(taskId, text, date, startTime, groupName, groupColor) {
+    async function scheduleReminder(taskId, text, date, startTime, reminderOffset, groupName, groupColor) {
         if (!startTime) return;
         try {
             // Создаём локальную дату из введенных пользователем значений
@@ -141,8 +141,11 @@ if ('serviceWorker' in navigator) {
                 return;
             }
 
+            // Вычитаем выбранный промежуток времени (в минутах)
+            const reminderDateTime = new Date(localDateTime.getTime() - (reminderOffset || 0) * 60 * 1000);
+
             // Преобразуем в UTC и определяем часовой пояс пользователя
-            const startDateTime = localDateTime.toISOString();
+            const startDateTime = reminderDateTime.toISOString();
             const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone; // например, "Europe/Moscow"
 
             const response = await fetch(`${PUSH_SERVER_URL}/api/schedule`, {
@@ -153,6 +156,7 @@ if ('serviceWorker' in navigator) {
                     text: text,
                     startDateTime: startDateTime,
                     timeZone: userTimeZone,
+                    reminderOffset: reminderOffset,
                     groupName: groupName || 'Без группы',
                     groupColor: groupColor || '#6b7280',
                     url: window.location.href,
@@ -1372,6 +1376,9 @@ if ('serviceWorker' in navigator) {
                     if (grp) color = grp.color;
                 }
 
+                // Читаем выбранное время напоминания
+                const reminderOffset = parseInt(document.getElementById('reminderOffset')?.value, 10) || 0;
+
                 const newTask = {
                     id: 'task' + Date.now(),
                     text: text,
@@ -1385,25 +1392,22 @@ if ('serviceWorker' in navigator) {
                     repeatEnd: repeatEnd || null,
                     completedDates: [],
                     pinnedDates: [],
+                    reminderOffset: reminderOffset
                 };
 
                 tasks.push(newTask);
                 saveData();
 
-                // Планируем напоминание (если есть время начала)
-                if (newTask.startTime) {
+                // Планируем напоминание за выбранный промежуток времени
+                if (newTask.startTime && newTask.reminderOffset > 0) {
                     const groupName = newTask.groupId
                         ? groups.find(g => g.id === newTask.groupId)?.name || 'Без группы'
                         : 'Без группы';
                     const groupColor = newTask.groupId
                         ? groups.find(g => g.id === newTask.groupId)?.color || '#6b7280'
                         : '#6b7280';
-                    scheduleReminder(newTask.id, newTask.text, newTask.date, newTask.startTime, groupName, groupColor);
+                    scheduleReminder(newTask.id, newTask.text, newTask.date, newTask.startTime, newTask.reminderOffset, groupName, groupColor);
                 }
-
-                // ====== ОТПРАВКА PUSH-УВЕДОМЛЕНИЯ ======
-                //sendTaskNotification(newTask.text, newTask.date); //мгновенное уведомление
-                // =========================================
 
                 input.value = '';
                 if (document.getElementById('repeatEnd')) document.getElementById('repeatEnd').value = '';
@@ -1533,10 +1537,8 @@ if ('serviceWorker' in navigator) {
         setInterval(updateDateTime, 1000);
 
         // ----- ПОДПИСКА НА PUSH (после регистрации SW) -----
-        // Ждём, пока Service Worker точно зарегистрируется, затем подписываемся.
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.ready.then(() => {
-                // Можно подписываться сразу, если разрешение уже дано или ещё не запрошено
                 if (Notification.permission === 'granted' || Notification.permission === 'default') {
                     subscribeToPush();
                 }
