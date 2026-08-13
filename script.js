@@ -134,10 +134,17 @@ if ('serviceWorker' in navigator) {
     async function scheduleReminder(taskId, text, date, startTime, groupName, groupColor) {
         if (!startTime) return;
         try {
-            // Создаём локальную дату из введённых пользователем значений
+            // Создаём локальную дату из введенных пользователем значений
             const localDateTime = new Date(`${date}T${startTime}:00`);
-            // Преобразуем в UTC и отправляем на сервер
+            if (isNaN(localDateTime.getTime())) {
+                console.error('❌ Некорректная дата или время задачи');
+                return;
+            }
+
+            // Преобразуем в UTC и определяем часовой пояс пользователя
             const startDateTime = localDateTime.toISOString();
+            const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone; // например, "Europe/Moscow"
+
             const response = await fetch(`${PUSH_SERVER_URL}/api/schedule`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -145,6 +152,7 @@ if ('serviceWorker' in navigator) {
                     taskId: taskId,
                     text: text,
                     startDateTime: startDateTime,
+                    timeZone: userTimeZone,
                     groupName: groupName || 'Без группы',
                     groupColor: groupColor || '#6b7280',
                     url: window.location.href,
@@ -152,9 +160,9 @@ if ('serviceWorker' in navigator) {
                 })
             });
             const result = await response.json();
-            console.log('Напоминание запланировано:', result);
+            console.log('🔔 [Client] Ответ сервера на планирование:', result);
         } catch (error) {
-            console.error('Ошибка планирования напоминания:', error);
+            console.error('❌ [Client] Ошибка планирования напоминания:', error);
         }
     }
 
