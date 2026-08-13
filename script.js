@@ -134,7 +134,10 @@ if ('serviceWorker' in navigator) {
     async function scheduleReminder(taskId, text, date, startTime, groupName, groupColor) {
         if (!startTime) return;
         try {
-            const startDateTime = `${date}T${startTime}:00`;
+            // Создаём локальную дату из введённых пользователем значений
+            const localDateTime = new Date(`${date}T${startTime}:00`);
+            // Преобразуем в UTC и отправляем на сервер
+            const startDateTime = localDateTime.toISOString();
             const response = await fetch(`${PUSH_SERVER_URL}/api/schedule`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1391,7 +1394,7 @@ if ('serviceWorker' in navigator) {
                 }
 
                 // ====== ОТПРАВКА PUSH-УВЕДОМЛЕНИЯ ======
-                //sendTaskNotification(newTask.text, newTask.date);  --- мгновенное уведомление
+                //sendTaskNotification(newTask.text, newTask.date); //мгновенное уведомление
                 // =========================================
 
                 input.value = '';
