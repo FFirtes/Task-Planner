@@ -61,21 +61,32 @@ function saveReminders() {
 }
 
 // --- Вспомогательная функция отправки уведомлений ---
-async function sendPushNotification(title, body, url) {
+async function sendPushNotification(title, body, url, deviceId) {
   const payload = JSON.stringify({ title, body, url: url || '/' });
 
-  if (subscriptions.length === 0) {
+  let targetSubscriptions = subscriptions;
+  if (deviceId) {
+    const found = subscriptions.find(s => s.deviceId === deviceId);
+    if (!found) {
+      console.log(`⚠️ Устройство ${deviceId} не найдено`);
+      return { successful: 0, failed: 0 };
+    }
+    targetSubscriptions = [found];
+  }
+
+  if (targetSubscriptions.length === 0) {
     console.log('ℹ️ Нет подписок для отправки');
     return { successful: 0, failed: 0 };
   }
 
   const results = await Promise.allSettled(
-    subscriptions.map(sub =>
-      webPush.sendNotification(sub, payload).catch(err => {
+    targetSubscriptions.map(item =>
+      webPush.sendNotification(item.subscription, payload).catch(err => {
+        // Если подписка недействительна (410 Gone), удаляем её
         if (err.statusCode === 410) {
-          subscriptions = subscriptions.filter(s => s.endpoint !== sub.endpoint);
+          subscriptions = subscriptions.filter(s => s.deviceId !== item.deviceId);
           saveSubscriptions(subscriptions);
-          console.log('🗑️ Удалена недействительная подписка');
+          console.log(`🗑️ Удалена недействительная подписка для ${item.deviceId}`);
         }
         throw err;
       })
@@ -91,7 +102,6 @@ async function sendPushNotification(title, body, url) {
 // --- Планирование напоминания ---
 function scheduleReminder(reminder) {
   const remindAt = new Date(reminder.remindAt);
-  // Если время уже прошло, не планируем
   if (remindAt <= new Date()) {
     console.log(`⏳ Время напоминания для задачи "${reminder.text}" уже прошло, пропускаем.`);
     return;
@@ -105,14 +115,14 @@ function scheduleReminder(reminder) {
       minute: '2-digit'
     });
     const body = `Группа: ${reminder.groupName} | Начало: ${timeStr}`;
-    sendPushNotification(title, body, reminder.url);
+    sendPushNotification(title, body, reminder.url, reminder.deviceId);
 
     // Удаляем напоминание после отправки
     reminders = reminders.filter(r => r.id !== reminder.id);
     saveReminders();
   });
 
-  console.log(`📅 Напоминание для "${reminder.text}" запланировано на ${remindAt.toLocaleString('ru-RU')}`);
+  console.log(`📅 Напоминание для "${reminder.text}" (устройство ${reminder.deviceId}) запланировано на ${remindAt.toLocaleString('ru-RU')}`);
 }
 
 // --- Восстановление напоминаний при запуске ---
@@ -120,7 +130,6 @@ function restoreReminders() {
   loadReminders();
   console.log(`🔔 Восстановлено ${reminders.length} напоминаний.`);
   reminders.forEach(rem => {
-    // Проверяем, не истекло ли время
     if (new Date(rem.remindAt) > new Date()) {
       scheduleReminder(rem);
     } else {
@@ -131,28 +140,29 @@ function restoreReminders() {
 
 // --- API ---
 
-// Получить публичный ключ
 app.get('/api/vapid-public-key', (req, res) => {
   res.json({ publicKey: VAPID_PUBLIC_KEY });
 });
 
-// Сохранить подписку
 app.post('/api/subscribe', (req, res) => {
-  const subscription = req.body;
-  subscriptions = subscriptions.filter(s => s.endpoint !== subscription.endpoint);
-  subscriptions.push(subscription);
+  const { subscription, deviceId } = req.body;
+  if (!deviceId) {
+    return res.status(400).json({ error: 'deviceId обязателен' });
+  }
+  // Удаляем старую подписку для этого deviceId
+  subscriptions = subscriptions.filter(s => s.deviceId !== deviceId);
+  subscriptions.push({ deviceId, subscription });
   saveSubscriptions(subscriptions);
-  console.log(`✅ Подписка сохранена. Всего: ${subscriptions.length}`);
+  console.log(`✅ Подписка для ${deviceId} сохранена. Всего: ${subscriptions.length}`);
   res.status(201).json({ message: 'Подписка сохранена' });
 });
 
-// Отправить немедленное уведомление (при создании задачи)
 app.post('/api/send-notification', async (req, res) => {
-  const { title, body, url } = req.body;
+  const { title, body, url, deviceId } = req.body;
   if (!title || !body) {
     return res.status(400).json({ error: 'Не указаны title и body' });
   }
-  const result = await sendPushNotification(title, body, url || '/');
+  const result = await sendPushNotification(title, body, url || '/', deviceId);
   res.json({
     message: `Отправлено ${result.successful} уведомлений`,
     successful: result.successful,
@@ -160,11 +170,9 @@ app.post('/api/send-notification', async (req, res) => {
   });
 });
 
-// Запланировать напоминание
 app.post('/api/schedule', (req, res) => {
-  const { taskId, text, startDateTime, groupName, groupColor, url } = req.body;
+  const { taskId, text, startDateTime, groupName, groupColor, url, deviceId } = req.body;
 
-  // Валидация
   if (!taskId || !text || !startDateTime) {
     return res.status(400).json({ error: 'Не указаны taskId, text или startDateTime' });
   }
@@ -183,7 +191,6 @@ app.post('/api/schedule', (req, res) => {
     });
   }
 
-  // Создаём объект напоминания
   const reminder = {
     id: taskId,
     text: text,
@@ -191,10 +198,10 @@ app.post('/api/schedule', (req, res) => {
     remindAt: remindAt.toISOString(),
     groupName: groupName || 'Без группы',
     groupColor: groupColor || '#6b7280',
-    url: url || '/'
+    url: url || '/',
+    deviceId: deviceId || null   // если нет deviceId, отправляем всем (обратная совместимость)
   };
 
-  // Сохраняем и планируем
   reminders.push(reminder);
   saveReminders();
   scheduleReminder(reminder);
@@ -205,21 +212,17 @@ app.post('/api/schedule', (req, res) => {
   });
 });
 
-// (Опционально) Просмотр подписок
 app.get('/api/subscriptions', (req, res) => {
   res.json({ count: subscriptions.length, subscriptions });
 });
 
-// (Опционально) Просмотр запланированных напоминаний
 app.get('/api/reminders', (req, res) => {
   res.json({ count: reminders.length, reminders });
 });
 
-// --- Запуск сервера ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Push-сервер запущен на порту ${PORT}`);
   console.log(`🔑 Публичный ключ: ${VAPID_PUBLIC_KEY}`);
-  // Восстанавливаем напоминания после старта
   restoreReminders();
 });
