@@ -134,17 +134,13 @@ if ('serviceWorker' in navigator) {
     async function scheduleReminder(taskId, text, date, startTime, groupName, groupColor, reminderOffset = 0) {
         if (!startTime || reminderOffset <= 0) return;
         try {
-            // Создаём локальную дату из введенных пользователем значений
             const localDateTime = new Date(`${date}T${startTime}:00`);
             if (isNaN(localDateTime.getTime())) {
                 console.error('❌ Некорректная дата или время задачи');
                 return;
             }
 
-            // Вычисляем точное время отправки уведомления (отнимаем отступ в минутах)
             const reminderDateTime = new Date(localDateTime.getTime() - reminderOffset * 60 * 1000);
-
-            // Преобразуем в UTC/ISO
             const startDateTime = localDateTime.toISOString();
             const reminderTime = reminderDateTime.toISOString();
             const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -165,10 +161,18 @@ if ('serviceWorker' in navigator) {
                     deviceId: getDeviceId()
                 })
             });
+
+            // ПРОВЕРКА: Если сервер вернул ошибку (4xx или 5xx), читаем текст, а не пытаемся парсить JSON
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`❌ [Client] Ошибка сервера (${response.status}):`, errorText);
+                return;
+            }
+
             const result = await response.json();
             console.log('🔔 [Client] Ответ сервера на планирование:', result);
         } catch (error) {
-            console.error('❌ [Client] Ошибка планирования напоминания:', error);
+            console.error('❌ [Client] Ошибка отправки запроса:', error);
         }
     }
 
