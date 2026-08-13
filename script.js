@@ -14,8 +14,8 @@ if ('serviceWorker' in navigator) {
     // PUSH-УВЕДОМЛЕНИЯ
     // ============================================================
 
-    // Адрес вашего push-сервера (для локальной разработки)
-    const PUSH_SERVER_URL = 'https://ffirtes.github.io/Task-Planner/';
+    // Адрес вашего push-сервера
+    const PUSH_SERVER_URL = 'https://task-planner-7cbp.onrender.com';
 
     // Получение публичного VAPID ключа с сервера
     async function getVapidPublicKey() {
