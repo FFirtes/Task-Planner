@@ -440,6 +440,79 @@ h1 {
     }
 }
 
+/* ===== СТИЛИ ДЛЯ ПОЛЕЙ ПЛАНИРОВАНИЯ В ФОРМЕ ===== */
+.planning-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* две колонки для первых двух строк */
+    gap: 0.5rem 0.8rem;
+    background: #202326;
+    padding: 0.8rem 1.2rem;
+    border-radius: 18px;
+    margin-bottom: 1rem;
+    align-items: center;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.planning-form .form-group {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.planning-form .form-group.full-width {
+    grid-column: 1 / -1; /* занимает всю ширину */
+}
+
+.planning-form label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #C1D0E9;
+    white-space: nowrap;
+}
+
+.planning-form input[type="date"],
+.planning-form input[type="time"],
+.planning-form select {
+    border: 1px solid #333539;
+    border-radius: 10px;
+    padding: 0.2rem 0.5rem;
+    background: #121212;
+    font-size: 0.8rem;
+    color: #ffffff;
+    outline: none;
+    transition: border 0.2s;
+    width: 100%;
+    min-width: 0;
+    flex: 1;
+    color-scheme: dark;
+    box-sizing: border-box;
+}
+
+.planning-form input:focus,
+.planning-form select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Адаптивность: на узких экранах всё в одну колонку */
+@media (max-width: 700px) {
+    .planning-form {
+        grid-template-columns: 1fr;
+    }
+    .planning-form .form-group.full-width {
+        grid-column: 1;
+    }
+}
+
+@media (max-width: 500px) {
+    .planning-form {
+        padding: 0.5rem 0.8rem;
+    }
+}
+
 /* ===== ФОРМА ДОБАВЛЕНИЯ ===== */
 .task-form {
     display: flex;
