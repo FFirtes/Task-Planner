@@ -1,68 +1,97 @@
-// push-server/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const webPush = require('web-push');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
-app.use(cors());
+app.use(cors()); // разрешаем запросы с любых доменов
 app.use(express.json());
 
-// --- 1. Генерация VAPID ключей (выполнить один раз) ---
-// Запустите в терминале: npx web-push generate-vapid-keys
-// и вставьте полученные ключи в переменные окружения (.env)
-// или прямо в код (не рекомендуется для продакшена).
+// --- Чтение VAPID ключей из переменных окружения ---
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'ВАШ_ПУБЛИЧНЫЙ_КЛЮЧ';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'ВАШ_ПРИВАТНЫЙ_КЛЮЧ';
+if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+  console.error('❌ VAPID ключи не заданы в переменных окружения!');
+  process.exit(1);
+}
 
 webPush.setVapidDetails(
-  'mailto:your-email@example.com', // замените на свой email
+  'mailto:ffirtes2718gmail.com', // замените на свой email
   VAPID_PUBLIC_KEY,
   VAPID_PRIVATE_KEY
 );
 
-// --- 2. Хранилище подписок (в памяти, при перезапуске теряется) ---
-// Для продакшена используйте базу данных (например, lowdb, MongoDB).
-let subscriptions = [];
+// --- Хранилище подписок (файл на диске) ---
+// Render даёт доступ к файловой системе, но файл может сброситься при перезапуске.
+// Для продакшена лучше использовать базу данных, но для начала подойдёт и файл.
+const SUBSCRIPTIONS_FILE = path.join(__dirname, 'subscriptions.json');
 
-// --- 3. Эндпоинты API ---
+function loadSubscriptions() {
+  try {
+    const data = fs.readFileSync(SUBSCRIPTIONS_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch (e) {
+    return [];
+  }
+}
 
-// 3.1. Сохранение подписки от клиента
+function saveSubscriptions(subscriptions) {
+  fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(subscriptions, null, 2));
+}
+
+let subscriptions = loadSubscriptions();
+
+// --- API ---
+
+// Получить публичный ключ (для клиента)
+app.get('/api/vapid-public-key', (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+// Сохранить подписку
 app.post('/api/subscribe', (req, res) => {
   const subscription = req.body;
-  // Проверяем, нет ли уже такой подписки
-  const exists = subscriptions.some(s => s.endpoint === subscription.endpoint);
-  if (!exists) {
-    subscriptions.push(subscription);
-    console.log('Подписка сохранена. Всего подписок:', subscriptions.length);
-  }
+  // Удаляем дубликаты
+  subscriptions = subscriptions.filter(s => s.endpoint !== subscription.endpoint);
+  subscriptions.push(subscription);
+  saveSubscriptions(subscriptions);
+  console.log(`✅ Подписка сохранена. Всего: ${subscriptions.length}`);
   res.status(201).json({ message: 'Подписка сохранена' });
 });
 
-// 3.2. Отправка уведомления (вызывается из клиента при создании задачи)
+// Отправить уведомление
 app.post('/api/send-notification', async (req, res) => {
   const { title, body, url } = req.body;
-
   if (!title || !body) {
     return res.status(400).json({ error: 'Не указаны title и body' });
   }
 
-  const payload = JSON.stringify({
-    title,
-    body,
-    url: url || '/'
-  });
+  const payload = JSON.stringify({ title, body, url: url || '/' });
 
-  // Отправляем всем сохранённым подпискам
+  if (subscriptions.length === 0) {
+    return res.json({ message: 'Нет подписок', successful: 0, failed: 0 });
+  }
+
   const results = await Promise.allSettled(
-    subscriptions.map(sub => webPush.sendNotification(sub, payload))
+    subscriptions.map(sub =>
+      webPush.sendNotification(sub, payload).catch(err => {
+        // Если подписка недействительна (410 Gone), удаляем её
+        if (err.statusCode === 410) {
+          subscriptions = subscriptions.filter(s => s.endpoint !== sub.endpoint);
+          saveSubscriptions(subscriptions);
+          console.log('🗑️ Удалена недействительная подписка');
+        }
+        throw err;
+      })
+    )
   );
 
   const successful = results.filter(r => r.status === 'fulfilled').length;
   const failed = results.filter(r => r.status === 'rejected').length;
-
-  console.log(`Отправлено ${successful} уведомлений, ошибок: ${failed}`);
+  console.log(`📤 Отправлено: ${successful} успешно, ${failed} ошибок`);
 
   res.json({
     message: `Отправлено ${successful} уведомлений`,
@@ -71,19 +100,14 @@ app.post('/api/send-notification', async (req, res) => {
   });
 });
 
-// 3.3. Получение публичного ключа (для клиента)
-app.get('/api/vapid-public-key', (req, res) => {
-  res.json({ publicKey: VAPID_PUBLIC_KEY });
-});
-
-// 3.4. (Опционально) Просмотр активных подписок (для отладки)
+// (Опционально) Просмотр подписок для отладки
 app.get('/api/subscriptions', (req, res) => {
   res.json({ count: subscriptions.length, subscriptions });
 });
 
-// --- 4. Запуск сервера ---
+// --- Запуск ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Push-сервер запущен на порту ${PORT}`);
-  console.log(`Публичный VAPID ключ: ${VAPID_PUBLIC_KEY}`);
+  console.log(`🚀 Push-сервер запущен на порту ${PORT}`);
+  console.log(`🔑 Публичный ключ: ${VAPID_PUBLIC_KEY}`);
 });
