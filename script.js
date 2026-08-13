@@ -1391,7 +1391,7 @@ if ('serviceWorker' in navigator) {
                 }
 
                 // ====== ОТПРАВКА PUSH-УВЕДОМЛЕНИЯ ======
-                sendTaskNotification(newTask.text, newTask.date);
+                //sendTaskNotification(newTask.text, newTask.date); // мгновенное уведомление
                 // =========================================
 
                 input.value = '';
