@@ -19,7 +19,7 @@ if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
 }
 
 webPush.setVapidDetails(
-  'mailto:ffirtes2718gmail.com', // замените на свой email
+  'mailto:ffirtes2718@gmail.com', // замените на свой email
   VAPID_PUBLIC_KEY,
   VAPID_PRIVATE_KEY
 );
