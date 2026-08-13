@@ -11,13 +11,23 @@ if ('serviceWorker' in navigator) {
     let groups = [];
 
     // ============================================================
+    // УНИКАЛЬНЫЙ ИДЕНТИФИКАТОР УСТРОЙСТВА
+    // ============================================================
+    function getDeviceId() {
+      let deviceId = localStorage.getItem('deviceId');
+      if (!deviceId) {
+        deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('deviceId', deviceId);
+      }
+      return deviceId;
+    }
+
+    // ============================================================
     // PUSH-УВЕДОМЛЕНИЯ
     // ============================================================
 
-    // Адрес вашего push-сервера
     const PUSH_SERVER_URL = 'https://task-planner-7cbp.onrender.com';
 
-    // Получение публичного VAPID ключа с сервера
     async function getVapidPublicKey() {
         try {
             const response = await fetch(`${PUSH_SERVER_URL}/api/vapid-public-key`);
@@ -29,7 +39,6 @@ if ('serviceWorker' in navigator) {
         }
     }
 
-    // Преобразование base64 в Uint8Array
     function urlBase64ToUint8Array(base64String) {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
         const base64 = (base64String + padding)
@@ -43,7 +52,6 @@ if ('serviceWorker' in navigator) {
         return outputArray;
     }
 
-    // Подписка на push-уведомления
     async function subscribeToPush() {
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
             console.log('Push не поддерживается');
@@ -84,14 +92,18 @@ if ('serviceWorker' in navigator) {
                 applicationServerKey: applicationServerKey
             });
 
+            const deviceId = getDeviceId();
             const response = await fetch(`${PUSH_SERVER_URL}/api/subscribe`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(subscription)
+                body: JSON.stringify({
+                    subscription: subscription,
+                    deviceId: deviceId
+                })
             });
 
             if (response.ok) {
-                console.log('Подписка сохранена на сервере');
+                console.log('Подписка сохранена на сервере для устройства', deviceId);
             } else {
                 console.error('Ошибка сохранения подписки');
             }
@@ -100,7 +112,6 @@ if ('serviceWorker' in navigator) {
         }
     }
 
-    // Отправка уведомления при создании задачи
     async function sendTaskNotification(taskTitle, taskDate) {
         try {
             const response = await fetch(`${PUSH_SERVER_URL}/api/send-notification`, {
@@ -109,7 +120,8 @@ if ('serviceWorker' in navigator) {
                 body: JSON.stringify({
                     title: `📋 Новая задача: ${taskTitle}`,
                     body: `Задача на ${formatDate(taskDate)}. Не забудьте выполнить!`,
-                    url: window.location.href
+                    url: window.location.href,
+                    deviceId: getDeviceId()
                 })
             });
             const result = await response.json();
@@ -119,26 +131,23 @@ if ('serviceWorker' in navigator) {
         }
     }
 
-    // --- Планирование напоминания на сервере ---
     async function scheduleReminder(taskId, text, date, startTime, groupName, groupColor) {
-        if (!startTime) return; // если нет времени начала, напоминание не нужно
+        if (!startTime) return;
         try {
-            // Формируем полную дату-время в ISO формате
             const startDateTime = `${date}T${startTime}:00`;
-
             const response = await fetch(`${PUSH_SERVER_URL}/api/schedule`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                taskId: taskId,
-                text: text,
-                startDateTime: startDateTime,
-                groupName: groupName || 'Без группы',
-                groupColor: groupColor || '#6b7280',
-                url: window.location.href
-            })
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    taskId: taskId,
+                    text: text,
+                    startDateTime: startDateTime,
+                    groupName: groupName || 'Без группы',
+                    groupColor: groupColor || '#6b7280',
+                    url: window.location.href,
+                    deviceId: getDeviceId()
+                })
             });
-
             const result = await response.json();
             console.log('Напоминание запланировано:', result);
         } catch (error) {
