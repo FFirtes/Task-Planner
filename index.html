@@ -54,7 +54,6 @@
 
                 <!-- Форма добавления задачи -->
                 <form id="taskForm" class="task-form">
-                    <!-- Блок планирования (дата, время) -->
                     <div class="planning-form">
                         <div class="form-group">
                             <label for="taskDate">Дата</label>
@@ -72,7 +71,6 @@
                             <label for="endTime">Время конца</label>
                             <input type="time" id="endTime" />
                         </div>
-                        
                     </div>
 
                     <div class="form-group full-width">
@@ -110,14 +108,12 @@
         <aside class="right-panel">
             <div class="tabs">
                 <button class="tab-btn active" data-tab="calendar">Календарь</button>
-                <button class="tab-btn" data-tab="archive">Архив</button>
-                <button class="tab-btn" data-tab="stats">Статистика</button>
+                <button class="tab-btn" data-tab="settings">Настройки</button>
             </div>
             <div class="tab-content">
                 <div id="tab-calendar" class="tab-pane active">
                     <div class="view-switcher">
-                        <button class="view-btn active" data-view="day">День</button>
-                        <button class="view-btn" data-view="week">Неделя</button>
+                        <button class="view-btn active" data-view="week">Неделя</button>
                         <button class="view-btn" data-view="month">Месяц</button>
                         <button class="view-btn" data-view="custom">Свой промежуток</button>
                         <button class="view-btn" data-view="all">Все задачи</button>
@@ -133,15 +129,12 @@
                         <button id="applyCustomRange">Применить</button>
                     </div>
                     <div id="calendarView"></div>
-                    <!-- Блок задач на дату удалён из правой панели -->
                 </div>
-                <div id="tab-archive" class="tab-pane">
-                    <h3>Выполненные задачи</h3>
-                    <ul id="archiveList"></ul>
-                </div>
-                <div id="tab-stats" class="tab-pane">
-                    <h3>Детальная статистика</h3>
-                    <div id="statsDetail"></div>
+                <div id="tab-settings" class="tab-pane">
+                    <h3>Настройки</h3>
+                    <div id="settingsContainer">
+                        <!-- сюда будет вставлено содержимое скриптом -->
+                    </div>
                 </div>
             </div>
         </aside>

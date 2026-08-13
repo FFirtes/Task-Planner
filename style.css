@@ -807,6 +807,12 @@ h1 {
     color: #E2EEFF;
 }
 
+/* Выделение выбранной даты в календаре */
+.calendar-cell.selected {
+    outline: 2px solid #3b82f6;
+    outline-offset: -2px;
+}
+
 /* ===== ЭЛЕМЕНТ ЗАДАЧИ (общий) ===== */
 .task-item {
     display: flex;
@@ -1041,44 +1047,71 @@ h1 {
     background: #1E1F21;
 }
 
-/* Архив */
-#archiveList {
-    list-style: none;
+/* ===== СТРАНИЦА НАСТРОЕК ===== */
+#settingsContainer {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
-    margin-top: 0.5rem;
+    gap: 1rem;
+    margin-top: 1rem;
 }
 
-#archiveList .task-item {
+.settings-card {
     background: #1E1F21;
-    opacity: 0.8;
+    border: 1px solid #4B4C4E;
+    border-radius: 16px;
+    padding: 1.2rem 1.5rem;
 }
 
-/* Статистика */
-#statsDetail {
-    display: flex;
-    flex-direction: column;
-    gap: 0.8rem;
-    margin-top: 0.5rem;
-}
-
-.stat-row {
-    display: flex;
-    justify-content: space-between;
-    background: #1E1F21;
-    padding: 0.5rem 1rem;
-    border-radius: 12px;
-    font-size: 0.9rem;
-}
-
-.stat-row .label {
-    color: #AAB9D0;
-}
-
-.stat-row .value {
+.settings-card h4 {
+    font-size: 1rem;
     font-weight: 600;
-    color: #F2FFFF;
+    color: #E2EEFF;
+    margin-bottom: 0.5rem;
+}
+
+.settings-card p {
+    font-size: 0.9rem;
+    color: #94a3b8;
+    margin-bottom: 0.8rem;
+}
+
+.settings-btn {
+    padding: 0.5rem 1.5rem;
+    border: none;
+    border-radius: 30px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.settings-btn.danger {
+    background: #ef4444;
+    color: white;
+}
+.settings-btn.danger:hover {
+    background: #dc2626;
+}
+
+.settings-btn.primary {
+    background: #3b82f6;
+    color: white;
+}
+.settings-btn.primary:hover {
+    background: #2563eb;
+}
+
+.settings-btn.secondary {
+    background: #2A2D30;
+    color: #F2FFEA;
+    border: 1px solid #4B4C4E;
+}
+.settings-btn.secondary:hover {
+    background: #3A3D40;
+}
+
+.settings-btn:active {
+    transform: scale(0.96);
 }
 
 /* ===== АДАПТИВНОСТЬ ===== */
@@ -1227,6 +1260,9 @@ h1 {
     }
     h1 {
         font-size: 1.5rem;
+    }
+    .settings-card {
+        padding: 1rem;
     }
 }
 

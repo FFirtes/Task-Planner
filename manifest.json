@@ -2,7 +2,7 @@
   "name": "Task Planner",
   "short_name": "Planner",
   "description": "Приложение для планирования ваших задач",
-  "start_url": "https://ffirtes.github.io/Task-Planner/",
+  "start_url": "/Task-Planner/",
   "display": "standalone",
   "background_color": "#202326",
   "theme_color": "#202326",

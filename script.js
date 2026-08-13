@@ -1,4 +1,4 @@
-if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js')
     .then(() => console.log('Service Worker зарегистрирован!'))
     .catch(err => console.log('Ошибка регистрации SW:', err));
@@ -9,6 +9,115 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
 (function() {
     let tasks = [];
     let groups = [];
+
+    // ============================================================
+    // PUSH-УВЕДОМЛЕНИЯ
+    // ============================================================
+
+    // Адрес вашего push-сервера (для локальной разработки)
+    const PUSH_SERVER_URL = 'http://localhost:3000';
+
+    // Получение публичного VAPID ключа с сервера
+    async function getVapidPublicKey() {
+        try {
+            const response = await fetch(`${PUSH_SERVER_URL}/api/vapid-public-key`);
+            const data = await response.json();
+            return data.publicKey;
+        } catch (error) {
+            console.error('Не удалось получить VAPID ключ:', error);
+            return null;
+        }
+    }
+
+    // Преобразование base64 в Uint8Array
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding)
+            .replace(/-/g, '+')
+            .replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    }
+
+    // Подписка на push-уведомления
+    async function subscribeToPush() {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            console.log('Push не поддерживается');
+            return;
+        }
+
+        if (Notification.permission === 'denied') {
+            console.log('Разрешение отклонено');
+            return;
+        }
+
+        if (Notification.permission === 'default') {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                console.log('Разрешение не получено');
+                return;
+            }
+        }
+
+        try {
+            const swRegistration = await navigator.serviceWorker.ready;
+            let subscription = await swRegistration.pushManager.getSubscription();
+            if (subscription) {
+                console.log('Уже подписаны');
+                return;
+            }
+
+            const publicKey = await getVapidPublicKey();
+            if (!publicKey) {
+                console.error('Не удалось получить публичный ключ');
+                return;
+            }
+
+            const applicationServerKey = urlBase64ToUint8Array(publicKey);
+
+            subscription = await swRegistration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: applicationServerKey
+            });
+
+            const response = await fetch(`${PUSH_SERVER_URL}/api/subscribe`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(subscription)
+            });
+
+            if (response.ok) {
+                console.log('Подписка сохранена на сервере');
+            } else {
+                console.error('Ошибка сохранения подписки');
+            }
+        } catch (error) {
+            console.error('Ошибка подписки:', error);
+        }
+    }
+
+    // Отправка уведомления при создании задачи
+    async function sendTaskNotification(taskTitle, taskDate) {
+        try {
+            const response = await fetch(`${PUSH_SERVER_URL}/api/send-notification`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: `📋 Новая задача: ${taskTitle}`,
+                    body: `Задача на ${formatDate(taskDate)}. Не забудьте выполнить!`,
+                    url: window.location.href
+                })
+            });
+            const result = await response.json();
+            console.log('Уведомление отправлено:', result);
+        } catch (error) {
+            console.error('Ошибка отправки уведомления:', error);
+        }
+    }
 
     // --- Загрузка / сохранение ---
     function loadData() {
@@ -606,10 +715,6 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
     }
 
     // --- Поиск текущей и следующей задачи (с учётом будущих дней до 7 дней) ---
-    // --- Вспомогательная функция для поиска следующей задачи в будущих днях (до 7 дней) ---
-    // Возвращает не только задачу, но и nextDate — фактическую дату повторения,
-    // на которую она приходится (для повторяющихся задач task.date — это дата
-    // создания задачи, а не дата конкретного будущего повторения).
     function findNextTaskInFuture(now) {
         for (let offset = 1; offset <= 7; offset++) {
             const d = new Date(now);
@@ -619,14 +724,12 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
             const withTime = tasksForDate.filter(t => t.startTime);
             if (withTime.length === 0) continue;
 
-            // Преобразуем в минуты
             const withMinutes = withTime.map(t => {
                 const parts = t.startTime.split(':').map(Number);
                 const startMinutes = parts[0] * 60 + parts[1];
                 return { task: t, startMinutes };
             });
 
-            // Сортируем по startMinutes и берём самую раннюю задачу
             withMinutes.sort((a, b) => a.startMinutes - b.startMinutes);
 
             return { next: withMinutes[0].task, nextDate: dateStr };
@@ -634,17 +737,14 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
         return { next: null, nextDate: null };
     }
 
-    // --- Поиск текущей и следующей задачи ---
     function findCurrentAndNextTasks(date) {
         const now = new Date();
         const currentTime = now.getHours() * 60 + now.getMinutes();
         const todayStr = formatLocalDate(now);
 
-        // Получаем задачи на сегодня
         const todayTasks = getTasksForDate(todayStr);
         const withTime = todayTasks.filter(t => t.startTime);
 
-        // Преобразуем в минуты
         const withMinutes = withTime.map(t => {
             const parts = t.startTime.split(':').map(Number);
             const startMinutes = parts[0] * 60 + parts[1];
@@ -656,11 +756,8 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
             return { task: t, startMinutes, endMinutes };
         });
 
-        // Сортируем по startMinutes
         withMinutes.sort((a, b) => a.startMinutes - b.startMinutes);
 
-        // Ищем текущую: start <= current < end (end обязателен, конец не включается —
-        // задача 22:52–23:55 перестаёт быть текущей ровно в 23:55, а не до 23:55:59)
         let current = null;
         for (let item of withMinutes) {
             if (item.endMinutes !== null && item.startMinutes <= currentTime && currentTime < item.endMinutes) {
@@ -669,11 +766,9 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
             }
         }
 
-        // Ищем следующую на сегодня: первая с start > currentTime
         let next = null;
         for (let item of withMinutes) {
             if (item.startMinutes > currentTime) {
-                // Убедимся, что это не текущая задача (по id)
                 if (!current || item.task.id !== current.id) {
                     next = item.task;
                     break;
@@ -682,17 +777,13 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
         }
 
         if (next) {
-            // Следующая задача нашлась сегодня же
             return { current, next, nextDate: todayStr };
         }
 
-        // На сегодня следующей задачи нет — ищем в будущих днях.
-        // Текущую задачу (если найдена) сохраняем, а не теряем.
         const future = findNextTaskInFuture(now);
         return { current, next: future.next, nextDate: future.nextDate };
     }
 
-    // Вспомогательная функция для парсинга времени в минуты
     function parseTime(timeStr) {
         const parts = timeStr.split(':').map(Number);
         return parts[0] * 60 + parts[1];
@@ -705,7 +796,6 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
 
         const { current, next, nextDate } = findCurrentAndNextTasks(date);
 
-        // Если нет ни текущей, ни следующей задачи
         if (!current && !next) {
             container.innerHTML = '<div class="next-task-empty">Нет предстоящих задач</div>';
             return;
@@ -713,12 +803,9 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
 
         let html = '';
 
-        // ---- БЛОК ТЕКУЩЕЙ ЗАДАЧИ ----
         if (current) {
-            // Если текущая задача есть — показываем её детали
             const grp = current.groupId ? groups.find(g => g.id === current.groupId) : null;
             const timeDisplay = getTimeDisplay(current);
-            // Текущая задача всегда сегодняшняя — дата всегда "сегодня"
             const dateDisplay = formatDateWithDay(getToday());
             html += `
                 <div class="next-task-item current">
@@ -734,7 +821,6 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
                 </div>
             `;
         } else {
-            // Если текущей задачи нет — показываем заглушку
             html += `
                 <div class="next-task-item current">
                     <div class="next-header">Текущая задача</div>
@@ -745,30 +831,27 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
             `;
         }
 
-    // ---- БЛОК СЛЕДУЮЩЕЙ ЗАДАЧИ ----
-    if (next) {
-        const grp = next.groupId ? groups.find(g => g.id === next.groupId) : null;
-        const timeDisplay = getTimeDisplay(next);
-        // nextDate — фактическая дата найденного повторения задачи
-        // (next.date для повторяющихся задач — это дата их создания, а не текущего повторения)
-        const dateDisplay = formatDateWithDay(nextDate);
-        html += `
-            <div class="next-task-item next">
-                <div class="next-header">Следующая задача</div>
-                <div class="next-details">
-                    <span class="next-time">${dateDisplay} ${timeDisplay}</span>
-                    <span class="next-group">
-                        <span class="group-color-dot" style="background:${next.color || (grp ? grp.color : '#6b7280')};"></span>
-                        ${grp ? grp.name : 'Без группы'}
-                    </span>
-                    <span class="next-text">${next.text}</span>
+        if (next) {
+            const grp = next.groupId ? groups.find(g => g.id === next.groupId) : null;
+            const timeDisplay = getTimeDisplay(next);
+            const dateDisplay = formatDateWithDay(nextDate);
+            html += `
+                <div class="next-task-item next">
+                    <div class="next-header">Следующая задача</div>
+                    <div class="next-details">
+                        <span class="next-time">${dateDisplay} ${timeDisplay}</span>
+                        <span class="next-group">
+                            <span class="group-color-dot" style="background:${next.color || (grp ? grp.color : '#6b7280')};"></span>
+                            ${grp ? grp.name : 'Без группы'}
+                        </span>
+                        <span class="next-text">${next.text}</span>
+                    </div>
                 </div>
-            </div>
-        `;
-    }
+            `;
+        }
 
-    container.innerHTML = html;
-}
+        container.innerHTML = html;
+    }
 
     // --- Рендеринг задач на выбранную дату (левая панель) ---
     function renderTasksForSelectedDate(date) {
@@ -823,10 +906,18 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
     }
 
     // --- Календарь ---
-    let currentView = 'day';
+    let currentView = 'week';
     let selectedDate = getToday();
     let customStart = getToday();
     let customEnd = getToday();
+
+    function highlightSelectedDate() {
+        document.querySelectorAll('.calendar-cell.selected').forEach(el => el.classList.remove('selected'));
+        const cell = document.querySelector(`.calendar-cell[data-date="${selectedDate}"]`);
+        if (cell) {
+            cell.classList.add('selected');
+        }
+    }
 
     function renderCalendar() {
         const container = document.getElementById('calendarView');
@@ -846,10 +937,7 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
 
         let daysArray = [];
 
-        if (currentView === 'day') {
-            daysArray = [selectedDate];
-            if (titleEl) titleEl.textContent = formatDate(selectedDate);
-        } else if (currentView === 'week') {
+        if (currentView === 'week') {
             const week = getWeekDays(selectedDate);
             daysArray = week;
             if (titleEl) titleEl.textContent = `Неделя ${formatDate(week[0])} – ${formatDate(week[6])}`;
@@ -858,7 +946,9 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
             const year = d.getFullYear();
             const month = d.getMonth() + 1;
             daysArray = getMonthDays(year, month);
-            if (titleEl) titleEl.textContent = `${d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}`;
+            let monthName = d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+            monthName = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+            if (titleEl) titleEl.textContent = monthName;
         } else if (currentView === 'custom') {
             const start = document.getElementById('customStart')?.value;
             const end = document.getElementById('customEnd')?.value;
@@ -880,59 +970,59 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
             }
         }
 
-        if (currentView === 'day') {
-            container.innerHTML = '';
-        } else {
-            const weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-            let html = `<div class="${currentView}-view">`;
-            html += `<div class="calendar-weekdays">`;
-            weekDays.forEach(wd => {
-                html += `<span class="weekday-label">${wd}</span>`;
-            });
-            html += `</div>`;
-            html += `<div class="calendar-grid">`;
-            const todayStr = getToday();
-            if (currentView === 'month') {
-                const d = parseLocalDate(selectedDate);
-                const year = d.getFullYear();
-                const month = d.getMonth() + 1;
-                const firstDay = new Date(year, month - 1, 1).getDay();
-                const offset = (firstDay === 0) ? 6 : firstDay - 1;
-                for (let i = 0; i < offset; i++) {
-                    html += `<div class="calendar-cell empty"></div>`;
-                }
+        const weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+        let html = `<div class="${currentView}-view">`;
+        html += `<div class="calendar-weekdays">`;
+        weekDays.forEach(wd => {
+            html += `<span class="weekday-label">${wd}</span>`;
+        });
+        html += `</div>`;
+        html += `<div class="calendar-grid">`;
+        const todayStr = getToday();
+        if (currentView === 'month') {
+            const d = parseLocalDate(selectedDate);
+            const year = d.getFullYear();
+            const month = d.getMonth() + 1;
+            const firstDay = new Date(year, month - 1, 1).getDay();
+            const offset = (firstDay === 0) ? 6 : firstDay - 1;
+            for (let i = 0; i < offset; i++) {
+                html += `<div class="calendar-cell empty"></div>`;
             }
-            daysArray.forEach(day => {
-                const dayTasks = getTasksForDate(day);
-                const hasTasks = dayTasks.length > 0;
-                const isToday = day === todayStr;
-                const dt = parseLocalDate(day);
-                const dayNum = dt.getDate();
-                html += `<div class="calendar-cell ${hasTasks ? 'has-tasks' : ''} ${isToday ? 'today' : ''}" data-date="${day}">
-                            <span class="day-number">${dayNum}</span>
-                            ${hasTasks ? `<span class="task-badge">${dayTasks.length}</span>` : ''}
-                        </div>`;
-            });
-            html += `</div></div>`;
-            container.innerHTML = html;
-            attachDateClickHandlers('.calendar-cell:not(.empty)');
         }
+        daysArray.forEach(day => {
+            const dayTasks = getTasksForDate(day);
+            const hasTasks = dayTasks.length > 0;
+            const isToday = day === todayStr;
+            const dt = parseLocalDate(day);
+            const dayNum = dt.getDate();
+            html += `<div class="calendar-cell ${hasTasks ? 'has-tasks' : ''} ${isToday ? 'today' : ''}" data-date="${day}">
+                        <span class="day-number">${dayNum}</span>
+                        ${hasTasks ? `<span class="task-badge">${dayTasks.length}</span>` : ''}
+                    </div>`;
+        });
+        html += `</div></div>`;
+        container.innerHTML = html;
 
+        attachDateClickHandlers('.calendar-cell:not(.empty)');
+        highlightSelectedDate();
         renderTasksForSelectedDate(selectedDate);
     }
 
     function attachDateClickHandlers(selector) {
         document.querySelectorAll(selector).forEach(el => {
-            el.addEventListener('click', function() {
-                const date = this.dataset.date;
-                if (date) {
-                    selectedDate = date;
-                    document.querySelectorAll(selector).forEach(c => c.style.outline = 'none');
-                    this.style.outline = '2px solid #3b82f6';
-                    renderAll();
-                }
-            });
+            el.removeEventListener('click', handleDateClick);
+            el.addEventListener('click', handleDateClick);
         });
+    }
+
+    function handleDateClick(e) {
+        const date = this.dataset.date;
+        if (date) {
+            selectedDate = date;
+            document.querySelectorAll('.calendar-cell.selected').forEach(c => c.classList.remove('selected'));
+            this.classList.add('selected');
+            renderAll();
+        }
     }
 
     // --- Вкладки ---
@@ -944,55 +1034,86 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
         const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
         if (btn) btn.classList.add('active');
 
-        if (tabId === 'archive') renderArchive();
-        if (tabId === 'stats') renderStats();
+        if (tabId === 'settings') renderSettings();
         if (tabId === 'calendar') renderCalendar();
     }
 
-    function renderArchive() {
-        const archiveList = document.getElementById('archiveList');
-        if (!archiveList) return;
-        const completedTasks = tasks.filter(t => t.completedDates && t.completedDates.length > 0);
-        archiveList.innerHTML = '';
-        if (completedTasks.length === 0) {
-            archiveList.innerHTML = '<li class="task-item" style="justify-content:center; background:transparent; border:none; color:#94a3b8;">Нет выполненных задач</li>';
-        } else {
-            const today = getToday();
-            completedTasks.sort((a, b) => a.date.localeCompare(b.date));
-            completedTasks.forEach(task => {
-                const li = createTaskElement(task, today, () => {
-                    renderArchive();
-                    if (currentView !== 'all') renderCalendar();
-                    renderTasksForSelectedDate(selectedDate);
-                }, false);
-                archiveList.appendChild(li);
-            });
-        }
-    }
-
-    function renderStats() {
-        const container = document.getElementById('statsDetail');
+    // --- Страница настроек ---
+    function renderSettings() {
+        const container = document.getElementById('settingsContainer');
         if (!container) return;
-        const total = tasks.length;
-        const completed = tasks.filter(t => t.completedDates && t.completedDates.length > 0).length;
-        const incomplete = total - completed;
-        const today = getToday();
-        const todayTasks = getTasksForDate(today);
-        const todayCompleted = todayTasks.filter(t => t.completedDates && t.completedDates.includes(today)).length;
-        const weekDays = getWeekDays(today);
-        const weekTasks = tasks.filter(t => weekDays.some(d => isTaskVisibleOnDate(t, d)));
-        const weekCompleted = weekTasks.filter(t => t.completedDates && t.completedDates.some(d => weekDays.includes(d))).length;
 
-        let html = `
-            <div class="stat-row"><span class="label">Всего задач</span><span class="value">${total}</span></div>
-            <div class="stat-row"><span class="label">Выполнено (хотя бы раз)</span><span class="value">${completed}</span></div>
-            <div class="stat-row"><span class="label">Не выполнено</span><span class="value">${incomplete}</span></div>
-            <div class="stat-row"><span class="label">Задач на сегодня</span><span class="value">${todayTasks.length}</span></div>
-            <div class="stat-row"><span class="label">Выполнено сегодня</span><span class="value">${todayCompleted}</span></div>
-            <div class="stat-row"><span class="label">Задач за неделю</span><span class="value">${weekTasks.length}</span></div>
-            <div class="stat-row"><span class="label">Выполнено за неделю</span><span class="value">${weekCompleted}</span></div>
+        container.innerHTML = `
+            <div class="settings-card">
+                <h4>Очистка данных</h4>
+                <p>Удалить все задачи и группы. Это действие необратимо.</p>
+                <button class="settings-btn danger" id="clearAllDataBtn">Очистить всё</button>
+            </div>
+            <div class="settings-card">
+                <h4>Экспорт данных</h4>
+                <p>Скачать все задачи и группы в формате JSON.</p>
+                <button class="settings-btn primary" id="exportDataBtn">Экспортировать</button>
+            </div>
+            <div class="settings-card">
+                <h4>Импорт данных</h4>
+                <p>Загрузить задачи и группы из JSON-файла. Существующие данные будут заменены.</p>
+                <input type="file" id="importFileInput" accept=".json" style="display:none;" />
+                <button class="settings-btn secondary" id="importDataBtn">Импортировать</button>
+            </div>
         `;
-        container.innerHTML = html;
+
+        document.getElementById('clearAllDataBtn').addEventListener('click', function() {
+            if (confirm('Вы уверены, что хотите удалить все задачи и группы? Это действие необратимо!')) {
+                tasks = [];
+                groups = [];
+                saveData();
+                renderAll();
+                renderSettings();
+                alert('Все данные очищены.');
+            }
+        });
+
+        document.getElementById('exportDataBtn').addEventListener('click', function() {
+            const data = { tasks, groups };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `task-planner-backup-${getToday()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('importDataBtn').addEventListener('click', function() {
+            document.getElementById('importFileInput').click();
+        });
+
+        document.getElementById('importFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    if (data.tasks && data.groups) {
+                        if (confirm('Импорт заменит все текущие задачи и группы. Продолжить?')) {
+                            tasks = data.tasks;
+                            groups = data.groups;
+                            saveData();
+                            renderAll();
+                            renderSettings();
+                            alert('Данные успешно импортированы.');
+                        }
+                    } else {
+                        alert('Неверный формат файла: отсутствуют поля tasks или groups.');
+                    }
+                } catch (err) {
+                    alert('Ошибка чтения файла: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+            this.value = '';
+        });
     }
 
     // --- Основная функция обновления ---
@@ -1002,15 +1123,14 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
         if (activeTab) {
             const tabId = activeTab.dataset.tab;
             if (tabId === 'calendar') renderCalendar();
-            else if (tabId === 'archive') renderArchive();
-            else if (tabId === 'stats') renderStats();
+            else if (tabId === 'settings') renderSettings();
         }
         renderGroups();
         populateGroupSelect();
         updateDateTime();
     }
 
-    // --- Обновление даты и времени (каждую секунду) ---
+    // --- Обновление даты и времени ---
     function updateDateTime() {
         const dateEl = document.getElementById('todayDate');
         const timeEl = document.getElementById('currentTime');
@@ -1222,6 +1342,11 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
 
                 tasks.push(newTask);
                 saveData();
+
+                // ====== ОТПРАВКА PUSH-УВЕДОМЛЕНИЯ ======
+                sendTaskNotification(newTask.text, newTask.date);
+                // =========================================
+
                 input.value = '';
                 if (document.getElementById('repeatEnd')) document.getElementById('repeatEnd').value = '';
                 if (document.getElementById('groupSelect')) document.getElementById('groupSelect').value = '';
@@ -1280,10 +1405,11 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
         document.getElementById('calendarPrev')?.addEventListener('click', function() {
             if (currentView === 'all') return;
             const d = parseLocalDate(selectedDate);
-            if (currentView === 'day') d.setDate(d.getDate() - 1);
-            else if (currentView === 'week') d.setDate(d.getDate() - 7);
+            if (currentView === 'week') d.setDate(d.getDate() - 7);
             else if (currentView === 'month') d.setMonth(d.getMonth() - 1);
-            else return;
+            else if (currentView === 'custom') {
+                return;
+            }
             selectedDate = formatLocalDate(d);
             renderAll();
         });
@@ -1291,15 +1417,15 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
         document.getElementById('calendarNext')?.addEventListener('click', function() {
             if (currentView === 'all') return;
             const d = parseLocalDate(selectedDate);
-            if (currentView === 'day') d.setDate(d.getDate() + 1);
-            else if (currentView === 'week') d.setDate(d.getDate() + 7);
+            if (currentView === 'week') d.setDate(d.getDate() + 7);
             else if (currentView === 'month') d.setMonth(d.getMonth() + 1);
-            else return;
+            else if (currentView === 'custom') {
+                return;
+            }
             selectedDate = formatLocalDate(d);
             renderAll();
         });
 
-        // Custom range
         document.getElementById('applyCustomRange')?.addEventListener('click', function() {
             const start = document.getElementById('customStart')?.value;
             const end = document.getElementById('customEnd')?.value;
@@ -1337,9 +1463,9 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
         }
 
         switchTab('calendar');
-        currentView = 'day';
-        const dayViewBtn = document.querySelector('.view-btn[data-view="day"]');
-        if (dayViewBtn) dayViewBtn.classList.add('active');
+        currentView = 'week';
+        const weekViewBtn = document.querySelector('.view-btn[data-view="week"]');
+        if (weekViewBtn) weekViewBtn.classList.add('active');
         const customContainer = document.getElementById('customRangeContainer');
         if (customContainer) customContainer.style.display = 'none';
         if (noneBtn) noneBtn.classList.add('active');
@@ -1347,6 +1473,18 @@ if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
         updateDateTime();
         renderAll();
         setInterval(updateDateTime, 1000);
+
+        // ----- ПОДПИСКА НА PUSH (после регистрации SW) -----
+        // Ждём, пока Service Worker точно зарегистрируется, затем подписываемся.
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(() => {
+                // Можно подписываться сразу, если разрешение уже дано или ещё не запрошено
+                if (Notification.permission === 'granted' || Notification.permission === 'default') {
+                    subscribeToPush();
+                }
+            });
+        }
+        // ----------------------------------------------------
     }
 
     document.addEventListener('DOMContentLoaded', init);
