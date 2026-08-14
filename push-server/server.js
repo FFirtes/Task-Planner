@@ -1,15 +1,17 @@
+// server.js — push-сервер с исправленным планированием напоминаний
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const webPush = require('web-push');
 const fs = require('fs');
 const path = require('path');
+const schedule = require('node-schedule');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- Чтение VAPID ключей ---
+// --- VAPID ключи ---
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 
@@ -24,9 +26,8 @@ webPush.setVapidDetails(
   VAPID_PRIVATE_KEY
 );
 
-// --- Хранилище подписок и напоминаний (файлы) ---
+// --- Хранилище подписок (файл) ---
 const SUBSCRIPTIONS_FILE = path.join(__dirname, 'subscriptions.json');
-const REMINDERS_FILE = path.join(__dirname, 'reminders.json');
 
 function loadSubscriptions() {
   try {
@@ -41,19 +42,6 @@ function saveSubscriptions(subscriptions) {
 }
 
 let subscriptions = loadSubscriptions();
-let reminders = [];
-
-function loadReminders() {
-  try {
-    reminders = JSON.parse(fs.readFileSync(REMINDERS_FILE, 'utf8'));
-  } catch (e) {
-    reminders = [];
-  }
-}
-
-function saveReminders() {
-  fs.writeFileSync(REMINDERS_FILE, JSON.stringify(reminders, null, 2));
-}
 
 // --- Функция отправки Push-уведомлений ---
 async function sendPushNotification(title, body, url, deviceId) {
@@ -93,63 +81,9 @@ async function sendPushNotification(title, body, url, deviceId) {
   return { successful, failed };
 }
 
-// --- Обработка и проверка накопившихся напоминаний ---
-async function processPendingReminders() {
-  const now = new Date();
-  const remainingReminders = [];
-
-  for (const rem of reminders) {
-    const remindAt = new Date(rem.remindAt);
-
-    // Если время напоминания наступило или уже прошло
-    if (remindAt <= now) {
-      const diffMinutes = Math.floor((now - remindAt) / (1000 * 60));
-
-      // Допускаем отправку с задержкой до 24 часов (на случай перезапуска или сна)
-      if (diffMinutes <= 24 * 60) {
-        console.log(`⏰ [Trigger] Срабатывание для "${rem.text}" (запланировано: ${rem.remindAt}, задержка: ${diffMinutes} мин)`);
-
-        let timeStr = '';
-        try {
-          timeStr = new Date(rem.startDateTime).toLocaleTimeString('ru-RU', {
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: rem.timeZone || 'UTC'
-          });
-        } catch (e) {
-          timeStr = new Date(rem.startDateTime).toLocaleTimeString('ru-RU', {
-            hour: '2-digit',
-            minute: '2-digit'
-          });
-        }
-
-        const title = `Напоминание: ${rem.text}`;
-        const body = `Группа: ${rem.groupName} | Начало: ${timeStr}`;
-
-        await sendPushNotification(title, body, rem.url, rem.deviceId);
-      } else {
-        console.log(`⏳ [Skip] Напоминание для "${rem.text}" просрочено более чем на 24ч, пропускаем.`);
-      }
-    } else {
-      // Время ещё не наступило — сохраняем в очереди
-      remainingReminders.push(rem);
-    }
-  }
-
-  if (reminders.length !== remainingReminders.length) {
-    reminders = remainingReminders;
-    saveReminders();
-  }
-}
-
-// Запуск фоновой проверки каждые 30 секунд
-setInterval(() => {
-  processPendingReminders();
-}, 30 * 1000);
-
 // --- API Эндпоинты ---
 
-// Пинг-эндпоинт для внешних сервисов удержания активности
+// Пинг-эндпоинт для UptimeRobot
 app.get('/api/ping', (req, res) => {
   res.json({ status: 'active', timestamp: new Date().toISOString() });
 });
@@ -183,77 +117,81 @@ app.post('/api/send-notification', async (req, res) => {
   });
 });
 
-const schedule = require('node-schedule'); // Убедитесь, что библиотека установлена (npm i node-schedule)
-
+// ======== ИСПРАВЛЕННЫЙ ЭНДПОИНТ ПЛАНИРОВАНИЯ ========
 app.post('/api/schedule', async (req, res) => {
-    try {
-        const { 
-            taskId, 
-            text, 
-            startDateTime, 
-            reminderTime, 
-            reminderOffset, 
-            groupName, 
-            groupColor, 
-            url, 
-            deviceId 
-        } = req.body;
+  try {
+    const {
+      taskId,
+      text,
+      startDateTime,
+      reminderTime,
+      reminderOffset,
+      groupName,
+      groupColor,
+      url,
+      deviceId,
+      timeZone
+    } = req.body;
 
-        console.log('📥 [Server] Запрос на планирование:', req.body);
+    console.log('📥 [Server] Запрос на планирование:', req.body);
 
-        if (!reminderTime) {
-            return res.status(400).json({ error: 'Не передано время напоминания (reminderTime)' });
-        }
-
-        const scheduleDate = new Date(reminderTime);
-
-        if (isNaN(scheduleDate.getTime())) {
-            return res.status(400).json({ error: 'Некорректный формат даты reminderTime' });
-        }
-
-        // Если задача с таким ID уже была запланирована ранее — отменяем старый таймер
-        if (schedule.scheduledJobs[taskId]) {
-            schedule.scheduledJobs[taskId].cancel();
-        }
-
-        // Планируем отправку
-        schedule.scheduleJob(taskId, scheduleDate, async function() {
-            console.log(`⏰ [Push] Сработало напоминание для задачи: ${text}`);
-            
-            // ВАЖНО: Вызовите вашу существующую функцию отправки Push
-            // Убедитесь, что название функции совпадает с той, что уже есть у вас в server.js!
-            /* 
-            if (typeof sendNotification === 'function') {
-                await sendNotification(deviceId, {
-                    title: `⏰ Напоминание: ${groupName || 'Задача'}`,
-                    body: text,
-                    url: url
-                });
-            } 
-            */
-        });
-
-        console.log(`✅ [Server] Напоминание запланировано на: ${scheduleDate.toLocaleString()}`);
-        return res.json({ status: 'success', scheduledFor: scheduleDate });
-
-    } catch (error) {
-        console.error('❌ [Server] Ошибка в /api/schedule:', error);
-        // Возвращаем JSON с ошибкой вместо падения в HTML
-        return res.status(500).json({ error: error.message || 'Внутренняя ошибка сервера' });
+    if (!reminderTime) {
+      return res.status(400).json({ error: 'Не передано время напоминания (reminderTime)' });
     }
+
+    const scheduleDate = new Date(reminderTime);
+    if (isNaN(scheduleDate.getTime())) {
+      return res.status(400).json({ error: 'Некорректный формат даты reminderTime' });
+    }
+
+    // Отменяем старый таймер, если он существует
+    if (schedule.scheduledJobs[taskId]) {
+      schedule.scheduledJobs[taskId].cancel();
+      console.log(`🔄 [Server] Отменён старый таймер для задачи ${taskId}`);
+    }
+
+    // Формируем сообщение заранее
+    const title = `⏰ Напоминание: ${text}`;
+    let timeStr = '';
+    try {
+      timeStr = new Date(startDateTime).toLocaleTimeString('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: timeZone || 'UTC'
+      });
+    } catch (e) {
+      timeStr = new Date(startDateTime).toLocaleTimeString('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    const body = `Группа: ${groupName || 'Без группы'} | Начало: ${timeStr}`;
+
+    // Планируем задачу
+    schedule.scheduleJob(taskId, scheduleDate, async function() {
+      console.log(`⏰ [Push] Сработало напоминание для задачи: ${text}`);
+      // ВАЖНО: вызываем реальную функцию отправки
+      const result = await sendPushNotification(title, body, url || '/', deviceId);
+      console.log(`📤 [Push] Результат отправки напоминания:`, result);
+    });
+
+    console.log(`✅ [Server] Напоминание запланировано на: ${scheduleDate.toLocaleString()}`);
+    res.json({ status: 'success', scheduledFor: scheduleDate, message: 'Напоминание запланировано' });
+
+  } catch (error) {
+    console.error('❌ [Server] Ошибка в /api/schedule:', error);
+    res.status(500).json({ error: error.message || 'Внутренняя ошибка сервера' });
+  }
 });
 
+// Дополнительные эндпоинты для отладки
 app.get('/api/subscriptions', (req, res) => {
   res.json({ count: subscriptions.length, subscriptions });
 });
 
-app.get('/api/reminders', (req, res) => {
-  res.json({ count: reminders.length, reminders });
-});
-
+// --- Запуск сервера ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Push-сервер запущен на порту ${PORT}`);
-  loadReminders();
-  processPendingReminders(); // Немедленная проверка пропущенных задач при запуске
+  console.log(`🔑 Публичный ключ: ${VAPID_PUBLIC_KEY}`);
 });
