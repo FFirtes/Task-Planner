@@ -151,7 +151,7 @@ app.post('/api/schedule', async (req, res) => {
     }
 
     // Формируем сообщение заранее
-    const title = `⏰ Напоминание: ${text}`;
+    const title = `Напоминание: ${text}`;
     let timeStr = '';
     try {
       timeStr = new Date(startDateTime).toLocaleTimeString('ru-RU', {
