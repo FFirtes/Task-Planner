@@ -59,7 +59,9 @@ if ('serviceWorker' in navigator) {
         }
 
         if (Notification.permission === 'denied') {
-            console.log('Разрешение отклонено');
+            console.log('Разрешение на уведомления отклонено');
+            // Обновим интерфейс, чтобы показать статус
+            updateSettingsUI();
             return;
         }
 
@@ -67,6 +69,7 @@ if ('serviceWorker' in navigator) {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') {
                 console.log('Разрешение не получено');
+                updateSettingsUI();
                 return;
             }
         }
@@ -74,23 +77,20 @@ if ('serviceWorker' in navigator) {
         try {
             const swRegistration = await navigator.serviceWorker.ready;
             let subscription = await swRegistration.pushManager.getSubscription();
-            if (subscription) {
-                console.log('Уже подписаны');
-                return;
+
+            if (!subscription) {
+                const publicKey = await getVapidPublicKey();
+                if (!publicKey) {
+                    console.error('Не удалось получить публичный VAPID ключ');
+                    updateSettingsUI();
+                    return;
+                }
+                const applicationServerKey = urlBase64ToUint8Array(publicKey);
+                subscription = await swRegistration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: applicationServerKey
+                });
             }
-
-            const publicKey = await getVapidPublicKey();
-            if (!publicKey) {
-                console.error('Не удалось получить публичный ключ');
-                return;
-            }
-
-            const applicationServerKey = urlBase64ToUint8Array(publicKey);
-
-            subscription = await swRegistration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: applicationServerKey
-            });
 
             const deviceId = getDeviceId();
             const response = await fetch(`${PUSH_SERVER_URL}/api/subscribe`, {
@@ -103,13 +103,15 @@ if ('serviceWorker' in navigator) {
             });
 
             if (response.ok) {
-                console.log('Подписка сохранена на сервере для устройства', deviceId);
+                console.log('Подписка успешно синхронизирована с сервером');
             } else {
-                console.error('Ошибка сохранения подписки');
+                console.error('Ошибка сохранения подписки на сервере');
             }
         } catch (error) {
             console.error('Ошибка подписки:', error);
         }
+        // Обновляем интерфейс настроек после попытки подписки
+        updateSettingsUI();
     }
 
     async function sendTaskNotification(taskTitle, taskDate) {
@@ -162,7 +164,6 @@ if ('serviceWorker' in navigator) {
                 })
             });
 
-            // ПРОВЕРКА: Если сервер вернул ошибку (4xx или 5xx), читаем текст, а не пытаемся парсить JSON
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error(`❌ [Client] Ошибка сервера (${response.status}):`, errorText);
@@ -1095,12 +1096,46 @@ if ('serviceWorker' in navigator) {
         if (tabId === 'calendar') renderCalendar();
     }
 
+    // --- Обновление UI настроек (статус уведомлений) ---
+    function updateSettingsUI() {
+        const container = document.getElementById('settingsContainer');
+        if (!container) return;
+        // Если мы находимся на вкладке настроек, перерисуем их
+        const activeTab = document.querySelector('.tab-btn.active');
+        if (activeTab && activeTab.dataset.tab === 'settings') {
+            renderSettings();
+        }
+    }
+
     // --- Страница настроек ---
     function renderSettings() {
         const container = document.getElementById('settingsContainer');
         if (!container) return;
 
+        // Определяем статус уведомлений
+        let notificationStatus = 'Неизвестно';
+        let isPushSupported = ('serviceWorker' in navigator) && ('PushManager' in window);
+        let isPermissionGranted = Notification.permission === 'granted';
+        let isPermissionDenied = Notification.permission === 'denied';
+        let isPermissionDefault = Notification.permission === 'default';
+
+        // Строим HTML с toggle-переключателем
         container.innerHTML = `
+            <div class="settings-card">
+                <h4>Уведомления</h4>
+                <p>Статус: <span id="notificationStatus">${notificationStatus}</span></p>
+                <div class="notification-toggle">
+                    <label class="switch">
+                        <input type="checkbox" id="notificationToggle" ${isPermissionGranted ? 'checked' : ''} ${!isPushSupported || isPermissionDenied ? 'disabled' : ''}>
+                        <span class="slider round"></span>
+                    </label>
+                    <span id="toggleLabel">${isPermissionGranted ? 'Включены' : isPermissionDenied ? 'Заблокированы' : 'Выключены'}</span>
+                </div>
+                <p style="font-size:0.8rem; color:#94a3b8; margin-top:0.5rem;">
+                    ${isPermissionDenied ? 'Разрешите уведомления в настройках браузера, чтобы включить.' : 'Включите уведомления, чтобы получать напоминания о задачах.'}
+                </p>
+                ${isPermissionDenied ? `<button class="settings-btn secondary" onclick="alert('Разрешите уведомления в настройках браузера')">Изменить разрешение</button>` : ''}
+            </div>
             <div class="settings-card">
                 <h4>Очистка данных</h4>
                 <p>Удалить все задачи и группы. Это действие необратимо.</p>
@@ -1119,6 +1154,92 @@ if ('serviceWorker' in navigator) {
             </div>
         `;
 
+        // Обновляем статус и переключатель
+        function updateNotificationUI() {
+            const statusEl = document.getElementById('notificationStatus');
+            const toggle = document.getElementById('notificationToggle');
+            const label = document.getElementById('toggleLabel');
+            if (!statusEl || !toggle || !label) return;
+
+            if (!isPushSupported) {
+                statusEl.textContent = '❌ Не поддерживается';
+                toggle.disabled = true;
+                label.textContent = 'Недоступно';
+                return;
+            }
+
+            if (Notification.permission === 'denied') {
+                statusEl.textContent = '⛔ Заблокировано в браузере';
+                toggle.checked = false;
+                toggle.disabled = true;
+                label.textContent = 'Заблокированы';
+                return;
+            }
+
+            // Проверяем активную подписку
+            navigator.serviceWorker.ready.then(sw => {
+                sw.pushManager.getSubscription().then(sub => {
+                    if (sub) {
+                        statusEl.textContent = '✅ Уведомления включены';
+                        toggle.checked = true;
+                        toggle.disabled = false;
+                        label.textContent = 'Включены';
+                    } else {
+                        statusEl.textContent = '⚠️ Разрешение есть, но подписка не создана';
+                        toggle.checked = false;
+                        toggle.disabled = false;
+                        label.textContent = 'Выключены';
+                    }
+                });
+            }).catch(() => {
+                statusEl.textContent = '⚠️ Ошибка проверки';
+            });
+
+            if (Notification.permission === 'default') {
+                statusEl.textContent = '⏳ Не запрошено';
+                toggle.checked = false;
+                toggle.disabled = false;
+                label.textContent = 'Выключены';
+            }
+        }
+
+        // Привязываем обработчик переключения
+        const toggle = document.getElementById('notificationToggle');
+        if (toggle) {
+            toggle.addEventListener('change', function(e) {
+                if (this.checked) {
+                    // Включаем уведомления
+                    subscribeToPush().then(() => {
+                        updateNotificationUI();
+                    }).catch(() => {
+                        // Если не удалось, сбрасываем чекбокс
+                        this.checked = false;
+                        updateNotificationUI();
+                    });
+                } else {
+                    // Выключаем уведомления (отписываемся)
+                    if (confirm('Отключить уведомления? Вы перестанете получать напоминания.')) {
+                        navigator.serviceWorker.ready.then(sw => {
+                            sw.pushManager.getSubscription().then(sub => {
+                                if (sub) {
+                                    sub.unsubscribe().then(() => {
+                                        console.log('Отписка выполнена');
+                                        updateNotificationUI();
+                                    });
+                                } else {
+                                    updateNotificationUI();
+                                }
+                            });
+                        });
+                    } else {
+                        // Возвращаем чекбокс в прежнее состояние
+                        this.checked = true;
+                    }
+                }
+            });
+        }
+
+        // Обработчики для остальных кнопок
         document.getElementById('clearAllDataBtn').addEventListener('click', function() {
             if (confirm('Вы уверены, что хотите удалить все задачи и группы? Это действие необратимо!')) {
                 tasks = [];
@@ -1171,6 +1292,9 @@ if ('serviceWorker' in navigator) {
             reader.readAsText(file);
             this.value = '';
         });
+
+        // Обновляем UI после рендера
+        updateNotificationUI();
     }
 
     // --- Основная функция обновления ---
@@ -1554,14 +1678,8 @@ if ('serviceWorker' in navigator) {
         renderAll();
         setInterval(updateDateTime, 1000);
 
-        // ----- ПОДПИСКА НА PUSH (после регистрации SW) -----
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.ready.then(() => {
-                if (Notification.permission === 'granted' || Notification.permission === 'default') {
-                    subscribeToPush();
-                }
-            });
-        }
+        // ----- ПОДПИСКА НА PUSH (больше НЕ вызывается автоматически) -----
+        // Весь код подписки перенесён в кнопку в настройках
         // ----------------------------------------------------
     }
 
